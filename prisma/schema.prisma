@@ -1,0 +1,269 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Shopify session management
+model Session {
+  id                  String    @id @db.VarChar(255)
+  shop                String    @db.VarChar(255)
+  state               String    @db.VarChar(255)
+  isOnline            Boolean   @default(false)
+  scope               String?   @db.Text
+  expires             DateTime?
+  accessToken         String    @db.Text
+  userId              BigInt?
+  firstName           String?   @db.VarChar(255)
+  lastName            String?   @db.VarChar(255)
+  email               String?   @db.VarChar(255)
+  accountOwner        Boolean   @default(false)
+  locale              String?   @db.VarChar(50)
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?   @db.Text
+  refreshTokenExpires DateTime?
+
+  @@index([shop])
+}
+
+// Shop/Store information
+model Shop {
+  id              String   @id @default(uuid())
+  shopDomain      String   @unique @db.VarChar(255)
+  name            String?  @db.VarChar(255)
+  email           String?  @db.VarChar(255)
+  plan            String   @default("free") @db.VarChar(50) // free, pro, ultra
+  storageUsedGB   Float    @default(0)
+  storageLimitGB  Float    @default(1) // 1GB for free
+  isActive        Boolean  @default(true)
+  installedAt     DateTime @default(now())
+  uninstalledAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  banners         Banner[]
+  images          BannerImage[]
+  styles          Style[]
+  analytics       BannerAnalytic[]
+  generationRequests GenerationRequest[]
+
+  @@index([shopDomain])
+  @@index([plan])
+}
+
+// Banners
+model Banner {
+  id                  String    @id @default(uuid())
+  shopId              String
+  shop                Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Basic info
+  title               String    @db.VarChar(255)
+  descriptionInternal String?   @db.Text
+  status              String    @default("draft") @db.VarChar(50) // draft, active, archived
+
+  // Layout & scheduling
+  layout              String    @db.VarChar(50) // hero, slider, promo_strip, product_highlight
+  scheduledStartAt    DateTime?
+  scheduledEndAt      DateTime?
+
+  // CTA configuration
+  ctaText             String?   @db.VarChar(100)
+  ctaUrl              String?   @db.Text
+  ctaTarget           String?   @db.VarChar(20) // _self, _blank
+  ctaStyle            String?   @db.VarChar(50) // button, link, badge
+  showCta             Boolean   @default(true)
+
+  // Text configuration
+  textMode            String    @default("overlay") @db.VarChar(50) // overlay, embedded
+  textTitle           String?   @db.VarChar(255)
+  textSubtitle        String?   @db.VarChar(255)
+  textPosition        String?   @db.VarChar(50) // left, right, center, top, bottom
+  textColors          Json?     // { title: "#fff", subtitle: "#eee", button: "#000" }
+
+  // Product context (if associated with a product)
+  productId           String?   @db.VarChar(255)
+  productTitle        String?   @db.VarChar(255)
+  productDescription  String?   @db.Text
+  collectionName      String?   @db.VarChar(255)
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  images              BannerImage[]
+  analytics           BannerAnalytic[]
+  generationRequests  GenerationRequest[]
+
+  @@index([shopId])
+  @@index([status])
+  @@index([layout])
+  @@index([createdAt])
+}
+
+// Images (AI generated, uploaded, or from Shopify products)
+model BannerImage {
+  id                String   @id @default(uuid())
+  shopId            String
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  bannerId          String?
+  banner            Banner?  @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+
+  // Source info
+  sourceType        String   @db.VarChar(50) // ai_generated, uploaded, shopify_product
+  storageUrl        String?  @db.Text // S3 URL
+  shopifyImageUrl   String?  @db.Text // Original Shopify URL if applicable
+
+  // Image properties
+  sizeInMB          Float
+  width             Int
+  height            Int
+  aspectRatio       String   @db.VarChar(20) // "16:9", "4:5", etc.
+  format            String   @db.VarChar(10) // webp, png, jpg
+
+  // For AI generation variants
+  isSelected        Boolean  @default(false)
+  variantIndex      Int?
+
+  // Metadata
+  alt               String?  @db.VarChar(255)
+  tags              Json?    // Array of tags
+
+  createdAt         DateTime @default(now())
+
+  generationRequest GenerationRequest? @relation(fields: [generationRequestId], references: [id])
+  generationRequestId String?
+
+  @@index([shopId])
+  @@index([bannerId])
+  @@index([sourceType])
+  @@index([createdAt])
+}
+
+// Custom Style Presets (Ultra feature)
+model Style {
+  id                          String   @id @default(uuid())
+  shopId                      String
+  shop                        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Identity
+  name                        String   @db.VarChar(255)
+  category                    String?  @db.VarChar(100) // Luxury, Sport, Fashion, Tech, Outdoors, Seasonal
+  status                      String   @default("draft") @db.VarChar(50) // active, draft
+  description                 String?  @db.Text
+
+  // Creative direction
+  stylePrompt                 String   @db.Text
+  negativePrompt              String?  @db.Text
+  toneKeywords                Json?    // Array of keywords
+  avoidTextInImage            Boolean  @default(true)
+  strictProductPreservation   Boolean  @default(true)
+
+  // Composition defaults
+  defaultComposition          String?  @db.VarChar(50) // product_left, product_right, centered, rule_of_thirds
+  backgroundStyle             String?  @db.VarChar(50) // clean, gradient, studio, lifestyle, pattern
+  cameraFeel                  String?  @db.VarChar(50) // wide, medium, close_up
+  depthOfField                String?  @db.VarChar(50) // none, subtle, strong
+  safeAreaProfile             String?  @db.VarChar(50) // left_text, right_text, top_strip, bottom_cta
+
+  // Branding & colors
+  primaryColor                String?  @db.VarChar(7) // #RRGGBB
+  accentColor                 String?  @db.VarChar(7)
+  backgroundColorHint         String?  @db.VarChar(7)
+  allowGradients              Boolean  @default(true)
+  logoUsage                   String?  @db.VarChar(50) // none, corner, watermark, overlay
+
+  // Output defaults
+  defaultAspectRatios         Json?    // Array of aspect ratios
+  defaultResolution           String?  @db.VarChar(50)
+  outputFormat                String   @default("webp") @db.VarChar(10)
+  compressionTarget           String?  @db.VarChar(50) // 150KB, 300KB, 500KB
+
+  // Compliance rules
+  complianceRules             Json?    // { noExtraProducts, noCompetingBrands, noTextArtifacts, etc. }
+
+  // Usage tracking
+  usageCount                  Int      @default(0)
+  isDefault                   Boolean  @default(false)
+
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  generationRequests          GenerationRequest[]
+
+  @@index([shopId])
+  @@index([status])
+  @@index([category])
+  @@index([isDefault])
+}
+
+// AI Generation Requests (for tracking and debugging)
+model GenerationRequest {
+  id                    String    @id @default(uuid())
+  shopId                String
+  shop                  Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  bannerId              String?
+  banner                Banner?   @relation(fields: [bannerId], references: [id], onDelete: SetNull)
+  styleId               String?
+  style                 Style?    @relation(fields: [styleId], references: [id], onDelete: SetNull)
+
+  // User inputs
+  userPrompt            String    @db.Text
+  productContext        Json?     // Product info for context
+  referenceImages       Json?     // Array of reference image URLs
+
+  // Generation config
+  format                String    @db.VarChar(20) // aspect ratio
+  dimensions            String    @db.VarChar(50) // "1920x800"
+  variantsRequested     Int       @default(2)
+  textMode              String    @db.VarChar(50)
+  compositionSettings   Json?     // All composition/branding options
+
+  // Result
+  variantsGenerated     Int       @default(0)
+  selectedVariantIndex  Int?
+  status                String    @default("pending") @db.VarChar(50) // pending, processing, completed, failed
+  errorMessage          String?   @db.Text
+
+  // n8n webhook info
+  webhookUrl            String?   @db.Text
+  webhookResponse       Json?
+
+  createdAt             DateTime  @default(now())
+  completedAt           DateTime?
+
+  images                BannerImage[]
+
+  @@index([shopId])
+  @@index([bannerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Analytics (Pro+ feature)
+model BannerAnalytic {
+  id        String   @id @default(uuid())
+  shopId    String
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  bannerId  String
+  banner    Banner   @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+
+  date      DateTime @db.Date
+  views     Int      @default(0)
+  clicks    Int      @default(0)
+  ctr       Float    @default(0) // Click-through rate (calculated)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bannerId, date])
+  @@index([shopId])
+  @@index([bannerId])
+  @@index([date])
+}
