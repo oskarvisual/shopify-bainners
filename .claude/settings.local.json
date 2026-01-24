@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npx prisma generate:*)",
-      "Bash(npx prisma migrate dev:*)"
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(ngrok config add-authtoken:*)",
+      "Bash(pkill ngrok:*)"
     ]
   }
 }

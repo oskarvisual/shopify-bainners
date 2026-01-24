@@ -1,0 +1,103 @@
+<div class="bainners-banner-block" id="bainners-banner-{{ block.id }}" data-banner-id="{{ block.settings.banner_id | escape }}">
+  {% if block.settings.banner_id == blank %}
+    <div class="bainners-banner-empty">
+      Add a Banner ID in the block settings to display a banner.
+    </div>
+  {% else %}
+    <div class="bainners-banner-loading">Loading banner...</div>
+  {% endif %}
+</div>
+
+<style>
+  .bainners-banner-block {
+    position: relative;
+    width: 100%;
+  }
+  .bainners-banner-empty,
+  .bainners-banner-loading {
+    padding: 24px;
+    border: 1px dashed #d2d5d8;
+    border-radius: 12px;
+    text-align: center;
+    color: #5c5f62;
+    background: #fafbfb;
+  }
+</style>
+
+<script>
+  (function () {
+    var container = document.getElementById("bainners-banner-{{ block.id }}");
+    if (!container) return;
+    var bannerId = container.getAttribute("data-banner-id");
+    if (!bannerId) return;
+    var url = "/apps/bainners/banner?banner_id=" + encodeURIComponent(bannerId);
+
+    function loadSwiperAssets() {
+      if (window.__bainnersSwiperLoaded) return Promise.resolve();
+      return new Promise(function (resolve, reject) {
+        var css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = "https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css";
+        document.head.appendChild(css);
+
+        var script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js";
+        script.onload = function () {
+          window.__bainnersSwiperLoaded = true;
+          resolve();
+        };
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    function initSwipers(root) {
+      if (typeof window.Swiper === "undefined") return;
+      var sliders = root.querySelectorAll(".bainners-swiper");
+      sliders.forEach(function (slider) {
+        if (slider.__bainnersInit) return;
+        slider.__bainnersInit = true;
+        var effect = slider.getAttribute("data-effect") || "slide";
+        new window.Swiper(slider, {
+          effect: effect,
+          loop: true,
+          pagination: {
+            el: slider.querySelector(".swiper-pagination"),
+            clickable: true
+          }
+        });
+      });
+    }
+
+    fetch(url, { credentials: "same-origin" })
+      .then(function (response) {
+        return response.text();
+      })
+      .then(function (html) {
+        container.innerHTML = html;
+        if (container.querySelector(".bainners-swiper")) {
+          loadSwiperAssets().then(function () {
+            initSwipers(container);
+          });
+        }
+      })
+      .catch(function () {
+        container.innerHTML = "<div class='bainners-banner-empty'>Unable to load banner.</div>";
+      });
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Bainners Banner",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "banner_id",
+      "label": "Banner ID",
+      "info": "Paste the Banner ID from the app."
+    }
+  ]
+}
+{% endschema %}

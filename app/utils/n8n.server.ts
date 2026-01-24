@@ -3,10 +3,24 @@
  *
  * Simple client to communicate with n8n webhooks.
  * n8n handles all complex operations: AI generation, S3 upload, optimization, etc.
+ *
+ * NOTE: This file is now integrated with automation.server.ts for better tracking.
+ * You can use either:
+ * - Functions here (simpler, backward compatible)
+ * - Functions in automation.server.ts (more features, better tracking)
  */
 
+import {
+  dispatchImageAutomation,
+  generateBannerWithAI,
+  uploadBannerImage,
+  optimizeBannerImage,
+  deleteImageFromS3,
+  type AutomationMeta,
+} from "./automation.server";
+
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_IMAGE_PROCESSOR || "";
-const N8N_TOKEN = process.env.N8N_TOKEN || "";
+const N8N_TOKEN = process.env.AUTOMATIONS_TOKEN || process.env.N8N_TOKEN || "";
 
 export type ImageAction = "generate" | "upload" | "optimize";
 
@@ -21,7 +35,7 @@ export interface N8nImageRequest {
     stylePrompt?: string;
     negativePrompt?: string;
     productContext?: Record<string, any>;
-    referenceImages?: string[]; // URLs or base64
+    referenceImages?: string | string[]; // URLs or base64
     format: string; // "16:9", "4:5", etc.
     dimensions: string; // "1920x800"
     variantsCount?: number; // How many variants to generate
@@ -72,6 +86,9 @@ export interface N8nImageResponse {
 
 /**
  * Send a request to n8n image processor webhook
+ *
+ * @deprecated Consider using dispatchImageAutomation() from automation.server.ts
+ * for better tracking and consistency with shopify-qa patterns.
  */
 export async function processImageWithN8n(
   request: N8nImageRequest
@@ -118,7 +135,7 @@ export async function generateImageWithAI(params: {
   stylePrompt?: string;
   negativePrompt?: string;
   productContext?: Record<string, any>;
-  referenceImages?: string[];
+  referenceImages?: string | string[];
   format: string;
   dimensions: string;
   variantsCount?: number;
@@ -181,3 +198,20 @@ export async function optimizeImage(params: {
     },
   });
 }
+
+// ============================================
+// Re-export automation functions for convenience
+// ============================================
+
+/**
+ * Re-export automation functions so they can be imported from n8n.server.ts
+ * This maintains backward compatibility while providing access to new features
+ */
+export {
+  dispatchImageAutomation,
+  generateBannerWithAI,
+  uploadBannerImage,
+  optimizeBannerImage,
+  deleteImageFromS3,
+  type AutomationMeta,
+};

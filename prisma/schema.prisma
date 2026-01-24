@@ -45,14 +45,15 @@ model Shop {
   isActive        Boolean  @default(true)
   installedAt     DateTime @default(now())
   uninstalledAt   DateTime?
+  setupGuideDismissedAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   banners         Banner[]
-  images          BannerImage[]
+  bannerItems     BannerItem[]
+  images          Image[]
   styles          Style[]
   analytics       BannerAnalytic[]
-  generationRequests GenerationRequest[]
 
   @@index([shopDomain])
   @@index([plan])
@@ -71,8 +72,10 @@ model Banner {
 
   // Layout & scheduling
   layout              String    @db.VarChar(50) // hero, slider, promo_strip, product_highlight
+  sliderType          String?   @db.VarChar(50)
   scheduledStartAt    DateTime?
   scheduledEndAt      DateTime?
+  customCss           String?   @db.Text
 
   // CTA configuration
   ctaText             String?   @db.VarChar(100)
@@ -94,12 +97,14 @@ model Banner {
   productDescription  String?   @db.Text
   collectionName      String?   @db.VarChar(255)
 
+  // Display order (for drag & drop)
+  displayOrder        Int       @default(0)
+
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  images              BannerImage[]
+  bannerItems         BannerItem[]
   analytics           BannerAnalytic[]
-  generationRequests  GenerationRequest[]
 
   @@index([shopId])
   @@index([status])
@@ -107,41 +112,68 @@ model Banner {
   @@index([createdAt])
 }
 
-// Images (AI generated, uploaded, or from Shopify products)
-model BannerImage {
+// Banner Items (what's displayed in each banner - references Image or external URL)
+model BannerItem {
   id                String   @id @default(uuid())
   shopId            String
   shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  bannerId          String?
-  banner            Banner?  @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  bannerId          String
+  banner            Banner   @relation(fields: [bannerId], references: [id], onDelete: Cascade)
 
-  // Source info
-  sourceType        String   @db.VarChar(50) // ai_generated, uploaded, shopify_product
-  storageUrl        String?  @db.Text // S3 URL
-  shopifyImageUrl   String?  @db.Text // Original Shopify URL if applicable
+  // Image reference - either our hosted image OR external Shopify URL
+  imageId           String?  // Reference to Image table (for ai_generated, uploaded)
+  image             Image?   @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  externalImageUrl  String?  @db.Text // For Shopify product images (doesn't count toward storage)
 
-  // Image properties
-  sizeInMB          Float
-  width             Int
-  height            Int
-  aspectRatio       String   @db.VarChar(20) // "16:9", "4:5", etc.
-  format            String   @db.VarChar(10) // webp, png, jpg
+  // Banner item specific data (for sliders, text overlays, etc.)
+  title             String?  @db.VarChar(255)
+  description       String?  @db.Text
+  displayOrder      Int      @default(0)
 
-  // For AI generation variants
+  // Selection/variant info
   isSelected        Boolean  @default(false)
   variantIndex      Int?
 
   // Metadata
   alt               String?  @db.VarChar(255)
   tags              Json?    // Array of tags
+  analytics         BannerAnalytic[]
 
   createdAt         DateTime @default(now())
-
-  generationRequest GenerationRequest? @relation(fields: [generationRequestId], references: [id])
-  generationRequestId String?
+  updatedAt         DateTime @updatedAt
 
   @@index([shopId])
   @@index([bannerId])
+  @@index([imageId])
+  @@index([displayOrder])
+}
+
+// Image Storage (ALL images we host - for GB usage calculation and gallery)
+model Image {
+  id                  String   @id @default(uuid())
+  shopId              String
+  shop                Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // File info
+  filename            String   @db.VarChar(255)
+  storageUrl          String   @db.Text // S3/CDN URL
+  sizeInMB            Float    // Parsed from "1.65 MB" format
+
+  // Image properties
+  width               Int
+  height              Int
+  aspectRatio         String   @db.VarChar(20) // "16:9", "4:5", etc.
+  format              String   @db.VarChar(10) // webp, png, jpg
+
+  // Source tracking
+  sourceType          String   @db.VarChar(50) // ai_generated, uploaded
+
+  // Usage tracking - which banners use this image
+  bannerItems         BannerItem[]
+
+  createdAt           DateTime @default(now())
+
+  @@index([shopId])
   @@index([sourceType])
   @@index([createdAt])
 }
@@ -195,55 +227,10 @@ model Style {
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
-  generationRequests          GenerationRequest[]
-
   @@index([shopId])
   @@index([status])
   @@index([category])
   @@index([isDefault])
-}
-
-// AI Generation Requests (for tracking and debugging)
-model GenerationRequest {
-  id                    String    @id @default(uuid())
-  shopId                String
-  shop                  Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  bannerId              String?
-  banner                Banner?   @relation(fields: [bannerId], references: [id], onDelete: SetNull)
-  styleId               String?
-  style                 Style?    @relation(fields: [styleId], references: [id], onDelete: SetNull)
-
-  // User inputs
-  userPrompt            String    @db.Text
-  productContext        Json?     // Product info for context
-  referenceImages       Json?     // Array of reference image URLs
-
-  // Generation config
-  format                String    @db.VarChar(20) // aspect ratio
-  dimensions            String    @db.VarChar(50) // "1920x800"
-  variantsRequested     Int       @default(2)
-  textMode              String    @db.VarChar(50)
-  compositionSettings   Json?     // All composition/branding options
-
-  // Result
-  variantsGenerated     Int       @default(0)
-  selectedVariantIndex  Int?
-  status                String    @default("pending") @db.VarChar(50) // pending, processing, completed, failed
-  errorMessage          String?   @db.Text
-
-  // n8n webhook info
-  webhookUrl            String?   @db.Text
-  webhookResponse       Json?
-
-  createdAt             DateTime  @default(now())
-  completedAt           DateTime?
-
-  images                BannerImage[]
-
-  @@index([shopId])
-  @@index([bannerId])
-  @@index([status])
-  @@index([createdAt])
 }
 
 // Analytics (Pro+ feature)
@@ -253,6 +240,8 @@ model BannerAnalytic {
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   bannerId  String
   banner    Banner   @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  bannerItemId String?
+  bannerItem   BannerItem? @relation(fields: [bannerItemId], references: [id], onDelete: SetNull)
 
   date      DateTime @db.Date
   views     Int      @default(0)
@@ -265,5 +254,6 @@ model BannerAnalytic {
   @@unique([bannerId, date])
   @@index([shopId])
   @@index([bannerId])
+  @@index([bannerItemId])
   @@index([date])
 }

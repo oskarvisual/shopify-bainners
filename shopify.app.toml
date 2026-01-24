@@ -7,7 +7,7 @@ embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
+dev_store_url = "product-test-9.myshopify.com"
 
 [webhooks]
 api_version = "2026-01"
@@ -22,9 +22,19 @@ api_version = "2026-01"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_products,read_files"
+scopes = "read_products,write_products,read_files"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [
+  "https://example.com/auth/callback",
+  "https://example.com/auth/shopify/callback",
+  "https://example.com/api/auth",
+  "https://example.com/api/auth/callback"
+]
+
+[app_proxy]
+prefix = "apps"
+subpath = "bainners"
+url = "https://example.com"
