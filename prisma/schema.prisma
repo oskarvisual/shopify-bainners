@@ -71,10 +71,49 @@ model Banner {
   status              String    @default("draft") @db.VarChar(50) // draft, active, archived
 
   // Layout & scheduling
-  layout              String    @db.VarChar(50) // hero, slider, promo_strip, product_highlight
+  layout              String    @db.VarChar(50) // announcement, hero, slider
   sliderType          String?   @db.VarChar(50)
+  sliderShowArrows    Boolean   @default(true)
+  sliderShowBullets   Boolean   @default(true)
+  sliderAutoplay      Boolean   @default(false)
+  sliderLoop          Boolean   @default(true)
+  sliderPerView       Float     @default(1)
+  sliderSpeed         String?   @db.VarChar(20)
+  sliderAutoplayDelay Int?
+  sliderCentered      Boolean   @default(false)
+  sliderSpaceBetween  Int?
+  sliderPauseOnHover  Boolean   @default(true)
+  sliderArrowStyle    String?   @db.VarChar(20)
+  sliderArrowColor    String?   @db.VarChar(20)
+  sliderBulletColor   String?   @db.VarChar(20)
   scheduledStartAt    DateTime?
   scheduledEndAt      DateTime?
+  announcementText    String?   @db.Text
+  announcementCtaText String?   @db.VarChar(100)
+  announcementCtaUrl  String?   @db.Text
+  announcementClosable Boolean  @default(false)
+  announcementCloseColor String? @db.VarChar(20)
+  announcementMarquee Boolean   @default(false)
+  announcementAnimation String? @db.VarChar(20)
+  announcementShowCountdown Boolean @default(false)
+  announcementCountdownMode String? @db.VarChar(50)
+  announcementCountdownEndAt DateTime?
+  announcementCountdownTimezone String? @db.VarChar(64)
+  announcementCountdownDurationHours String? @db.VarChar(20)
+  bannerBackgroundColor String? @db.VarChar(20)
+  titleFontSize       String?   @db.VarChar(20)
+  descriptionFontSize String?   @db.VarChar(20)
+  titleColor          String?   @db.VarChar(20)
+  descriptionColor    String?   @db.VarChar(20)
+  ctaTextColor        String?   @db.VarChar(20)
+  ctaBackgroundColor  String?   @db.VarChar(20)
+  ctaBorderColor      String?   @db.VarChar(20)
+  ctaBordered         Boolean   @default(false)
+  ctaRounded          Boolean   @default(true)
+  ctaShadow           Boolean   @default(false)
+  countdownTextColor  String?   @db.VarChar(20)
+  countdownBackgroundColor String? @db.VarChar(20)
+  countdownStyle      String?   @db.VarChar(20)
   customCss           String?   @db.Text
 
   // CTA configuration

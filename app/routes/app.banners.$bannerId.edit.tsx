@@ -37,6 +37,10 @@ import {
   SearchIcon,
   ClipboardIcon,
   QuestionCircleIcon,
+  ViewIcon,
+  MegaphoneIcon,
+  SlideshowIcon,
+  PlayCircleIcon,
 } from "@shopify/polaris-icons";
 
 const APP_GALLERY_PAGE_SIZE = 12;
@@ -233,6 +237,47 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       descriptionInternal: banner.descriptionInternal || "",
       layout: banner.layout,
       sliderType: banner.sliderType || "slide",
+      sliderShowArrows: banner.sliderShowArrows ?? true,
+      sliderShowBullets: banner.sliderShowBullets ?? true,
+      sliderAutoplay: banner.sliderAutoplay ?? false,
+      sliderLoop: banner.sliderLoop ?? true,
+      sliderPerView: banner.sliderPerView ?? 1,
+      sliderSpeed: banner.sliderSpeed || "regular",
+      sliderAutoplayDelay: banner.sliderAutoplayDelay ?? 3500,
+      sliderCentered: banner.sliderCentered ?? false,
+      sliderSpaceBetween: banner.sliderSpaceBetween ?? 16,
+      sliderPauseOnHover: banner.sliderPauseOnHover ?? true,
+      sliderArrowStyle: banner.sliderArrowStyle || "chevron",
+      sliderArrowColor: banner.sliderArrowColor || "",
+      sliderBulletColor: banner.sliderBulletColor || "",
+      announcementText: banner.announcementText || "",
+      announcementCtaText: banner.announcementCtaText || "",
+      announcementCtaUrl: banner.announcementCtaUrl || "",
+      announcementClosable: banner.announcementClosable ?? false,
+      announcementCloseColor: banner.announcementCloseColor || "",
+      announcementMarquee: banner.announcementMarquee ?? false,
+      announcementAnimation: banner.announcementAnimation || "none",
+      announcementShowCountdown: banner.announcementShowCountdown,
+      announcementCountdownMode: banner.announcementCountdownMode || "fixed",
+      announcementCountdownEndAt: banner.announcementCountdownEndAt
+        ? banner.announcementCountdownEndAt.toISOString().slice(0, 16)
+        : "",
+      announcementCountdownTimezone: banner.announcementCountdownTimezone || "UTC",
+      announcementCountdownDurationHours: banner.announcementCountdownDurationHours || "1",
+      bannerBackgroundColor: banner.bannerBackgroundColor || "",
+      titleFontSize: banner.titleFontSize || "lg",
+      descriptionFontSize: banner.descriptionFontSize || "md",
+      titleColor: banner.titleColor || "",
+      descriptionColor: banner.descriptionColor || "",
+      ctaTextColor: banner.ctaTextColor || "",
+      ctaBackgroundColor: banner.ctaBackgroundColor || "",
+      ctaBorderColor: banner.ctaBorderColor || "",
+      ctaBordered: banner.ctaBordered ?? false,
+      ctaRounded: banner.ctaRounded ?? true,
+      ctaShadow: banner.ctaShadow ?? false,
+      countdownTextColor: banner.countdownTextColor || "",
+      countdownBackgroundColor: banner.countdownBackgroundColor || "",
+      countdownStyle: banner.countdownStyle || "solid",
       status: banner.status,
       customCss: banner.customCss || "",
       scheduledStartAt: banner.scheduledStartAt
@@ -316,13 +361,132 @@ export async function action({ request, params }: ActionFunctionArgs) {
         where: { id: banner.id },
         data: {
           title: (formData.get("title") as string) || banner.title,
-          descriptionInternal: (formData.get("descriptionInternal") as string) || null,
-          layout: (formData.get("layout") as string) || banner.layout,
-          sliderType: (formData.get("sliderType") as string) || banner.sliderType,
-          status: nextStatus,
-          customCss: formData.has("customCss")
-            ? ((formData.get("customCss") as string) || null)
-            : banner.customCss,
+        descriptionInternal: (formData.get("descriptionInternal") as string) || null,
+        layout: (formData.get("layout") as string) || banner.layout,
+        sliderType: (formData.get("sliderType") as string) || banner.sliderType,
+        sliderShowArrows: formData.has("sliderShowArrows")
+          ? formData.get("sliderShowArrows") === "true"
+          : banner.sliderShowArrows,
+        sliderShowBullets: formData.has("sliderShowBullets")
+          ? formData.get("sliderShowBullets") === "true"
+          : banner.sliderShowBullets,
+        sliderAutoplay: formData.has("sliderAutoplay")
+          ? formData.get("sliderAutoplay") === "true"
+          : banner.sliderAutoplay,
+        sliderLoop: formData.has("sliderLoop")
+          ? formData.get("sliderLoop") === "true"
+          : banner.sliderLoop,
+        sliderPerView: formData.has("sliderPerView")
+          ? Number(formData.get("sliderPerView") || 1)
+          : banner.sliderPerView,
+        sliderSpeed: formData.has("sliderSpeed")
+          ? ((formData.get("sliderSpeed") as string) || null)
+          : banner.sliderSpeed,
+        sliderAutoplayDelay: formData.has("sliderAutoplayDelay")
+          ? Number(formData.get("sliderAutoplayDelay") || 3500)
+          : banner.sliderAutoplayDelay,
+        sliderCentered: formData.has("sliderCentered")
+          ? formData.get("sliderCentered") === "true"
+          : banner.sliderCentered,
+        sliderSpaceBetween: formData.has("sliderSpaceBetween")
+          ? Number(formData.get("sliderSpaceBetween") || 16)
+          : banner.sliderSpaceBetween,
+        sliderPauseOnHover: formData.has("sliderPauseOnHover")
+          ? formData.get("sliderPauseOnHover") === "true"
+          : banner.sliderPauseOnHover,
+        sliderArrowStyle: formData.has("sliderArrowStyle")
+          ? ((formData.get("sliderArrowStyle") as string) || null)
+          : banner.sliderArrowStyle,
+        sliderArrowColor: formData.has("sliderArrowColor")
+          ? ((formData.get("sliderArrowColor") as string) || null)
+          : banner.sliderArrowColor,
+        sliderBulletColor: formData.has("sliderBulletColor")
+          ? ((formData.get("sliderBulletColor") as string) || null)
+          : banner.sliderBulletColor,
+        status: nextStatus,
+        announcementText: formData.has("announcementText")
+          ? ((formData.get("announcementText") as string) || null)
+          : banner.announcementText,
+        announcementCtaText: formData.has("announcementCtaText")
+          ? ((formData.get("announcementCtaText") as string) || null)
+          : banner.announcementCtaText,
+        announcementCtaUrl: formData.has("announcementCtaUrl")
+          ? ((formData.get("announcementCtaUrl") as string) || null)
+          : banner.announcementCtaUrl,
+        announcementClosable: formData.has("announcementClosable")
+          ? formData.get("announcementClosable") === "true"
+          : banner.announcementClosable,
+        announcementCloseColor: formData.has("announcementCloseColor")
+          ? ((formData.get("announcementCloseColor") as string) || null)
+          : banner.announcementCloseColor,
+        announcementMarquee: formData.has("announcementMarquee")
+          ? formData.get("announcementMarquee") === "true"
+          : banner.announcementMarquee,
+        announcementAnimation: formData.has("announcementAnimation")
+          ? ((formData.get("announcementAnimation") as string) || null)
+          : banner.announcementAnimation,
+        announcementShowCountdown: formData.has("announcementShowCountdown")
+          ? formData.get("announcementShowCountdown") === "true"
+          : banner.announcementShowCountdown,
+        announcementCountdownMode: formData.has("announcementCountdownMode")
+          ? ((formData.get("announcementCountdownMode") as string) || null)
+          : banner.announcementCountdownMode,
+        announcementCountdownEndAt: formData.has("announcementCountdownEndAt")
+          ? ((formData.get("announcementCountdownEndAt") as string) || null)
+            ? new Date(formData.get("announcementCountdownEndAt") as string)
+            : null
+          : banner.announcementCountdownEndAt,
+        announcementCountdownTimezone: formData.has("announcementCountdownTimezone")
+          ? ((formData.get("announcementCountdownTimezone") as string) || null)
+          : banner.announcementCountdownTimezone,
+        announcementCountdownDurationHours: formData.has("announcementCountdownDurationHours")
+          ? ((formData.get("announcementCountdownDurationHours") as string) || null)
+          : banner.announcementCountdownDurationHours,
+        bannerBackgroundColor: formData.has("bannerBackgroundColor")
+          ? ((formData.get("bannerBackgroundColor") as string) || null)
+          : banner.bannerBackgroundColor,
+        titleFontSize: formData.has("titleFontSize")
+          ? ((formData.get("titleFontSize") as string) || null)
+          : banner.titleFontSize,
+        descriptionFontSize: formData.has("descriptionFontSize")
+          ? ((formData.get("descriptionFontSize") as string) || null)
+          : banner.descriptionFontSize,
+        titleColor: formData.has("titleColor")
+          ? ((formData.get("titleColor") as string) || null)
+          : banner.titleColor,
+        descriptionColor: formData.has("descriptionColor")
+          ? ((formData.get("descriptionColor") as string) || null)
+          : banner.descriptionColor,
+        ctaTextColor: formData.has("ctaTextColor")
+          ? ((formData.get("ctaTextColor") as string) || null)
+          : banner.ctaTextColor,
+        ctaBackgroundColor: formData.has("ctaBackgroundColor")
+          ? ((formData.get("ctaBackgroundColor") as string) || null)
+          : banner.ctaBackgroundColor,
+        ctaBorderColor: formData.has("ctaBorderColor")
+          ? ((formData.get("ctaBorderColor") as string) || null)
+          : banner.ctaBorderColor,
+        ctaBordered: formData.has("ctaBordered")
+          ? formData.get("ctaBordered") === "true"
+          : banner.ctaBordered,
+        ctaRounded: formData.has("ctaRounded")
+          ? formData.get("ctaRounded") === "true"
+          : banner.ctaRounded,
+        ctaShadow: formData.has("ctaShadow")
+          ? formData.get("ctaShadow") === "true"
+          : banner.ctaShadow,
+        countdownTextColor: formData.has("countdownTextColor")
+          ? ((formData.get("countdownTextColor") as string) || null)
+          : banner.countdownTextColor,
+        countdownBackgroundColor: formData.has("countdownBackgroundColor")
+          ? ((formData.get("countdownBackgroundColor") as string) || null)
+          : banner.countdownBackgroundColor,
+        countdownStyle: formData.has("countdownStyle")
+          ? ((formData.get("countdownStyle") as string) || null)
+          : banner.countdownStyle,
+        customCss: formData.has("customCss")
+          ? ((formData.get("customCss") as string) || null)
+          : banner.customCss,
       },
     });
 
@@ -644,6 +808,82 @@ export async function action({ request, params }: ActionFunctionArgs) {
     });
   }
 
+  if (action === "add-video") {
+    const videoUrl = (formData.get("videoUrl") as string) || "";
+    const autoplay = formData.get("autoplay") === "true";
+    const muted = formData.get("muted") === "true";
+    const loop = formData.get("loop") === "true";
+    const showControls = formData.get("showControls") !== "false";
+
+    if (!videoUrl) {
+      return json({ success: false, error: "Video URL is required." }, { status: 400 });
+    }
+
+    const parsed = parseVideoUrl(videoUrl);
+    if (!parsed) {
+      return json(
+        { success: false, error: "Please use a valid YouTube or Vimeo URL." },
+        { status: 400 }
+      );
+    }
+
+    if (banner.layout === "hero") {
+      await db.bannerItem.deleteMany({
+        where: { bannerId: banner.id },
+      });
+    } else {
+      await db.bannerItem.updateMany({
+        where: { bannerId: banner.id },
+        data: { isSelected: false },
+      });
+    }
+
+    const displayOrder = await db.bannerItem.count({
+      where: { bannerId: banner.id },
+    });
+
+    const videoThumbnailUrl =
+      parsed.provider === "youtube"
+        ? `https://img.youtube.com/vi/${parsed.id}/hqdefault.jpg`
+        : `https://vumbnail.com/${parsed.id}.jpg`;
+
+    const item = await db.bannerItem.create({
+      data: {
+        shopId: shopRecord.id,
+        bannerId: banner.id,
+        displayOrder,
+        isSelected: displayOrder === 0,
+        tags: {
+          mediaType: "video",
+          videoUrl,
+          videoProvider: parsed.provider,
+          videoId: parsed.id,
+          videoThumbnailUrl,
+          autoplay,
+          muted,
+          loop,
+          showControls,
+          showOverlay: false,
+          showTextOverlay: false,
+          textTitle: "",
+          textDescription: "",
+          textPosition: "bottom_left",
+          showCta: false,
+          ctaText: "",
+          ctaUrl: "",
+          showCountdown: false,
+          countdownMode: "fixed",
+          countdownEndAt: "",
+          countdownTimezone: "UTC",
+          countdownDurationHours: "1",
+          contentOrder: ["title", "description", "cta", "countdown"],
+        },
+      },
+    });
+
+    return json({ success: true, itemId: item.id });
+  }
+
   if (action === "attach-image") {
     const imageId = formData.get("imageId") as string;
     const externalImageUrl = formData.get("externalImageUrl") as string;
@@ -733,6 +973,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     if (!existing) {
       return json({ success: false, error: "Banner item not found" }, { status: 404 });
+    }
+
+    if (formData.has("tagsJson")) {
+      const tagsJson = formData.get("tagsJson") as string;
+      const nextTags = tagsJson ? JSON.parse(tagsJson) : {};
+      await db.bannerItem.update({
+        where: { id: itemId, bannerId: banner.id },
+        data: { tags: nextTags },
+      });
+      return json({ success: true });
     }
 
     const nextTags: Record<string, any> = { ...(existing.tags as Record<string, any> | null) };
@@ -829,6 +1079,32 @@ function extractN8nImage(data: any): {
   return {};
 }
 
+function parseVideoUrl(url: string): { provider: "youtube" | "vimeo"; id: string } | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace("www.", "");
+
+    if (host.includes("youtube.com")) {
+      const id = parsed.searchParams.get("v");
+      if (id) return { provider: "youtube", id };
+    }
+
+    if (host === "youtu.be") {
+      const id = parsed.pathname.replace("/", "");
+      if (id) return { provider: "youtube", id };
+    }
+
+    if (host.includes("vimeo.com")) {
+      const id = parsed.pathname.split("/").filter(Boolean)[0];
+      if (id) return { provider: "vimeo", id };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function BannerEdit() {
   const {
     plan,
@@ -854,12 +1130,15 @@ export default function BannerEdit() {
   const characterUploadFetcher = useFetcher();
   const productUploadFetcher = useFetcher();
   const attachFetcher = useFetcher();
+  const videoFetcher = useFetcher();
   const reorderFetcher = useFetcher();
   const removeItemFetcher = useFetcher();
   const deleteFetcher = useFetcher();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalOption, setModalOption] = useState<"gallery" | "upload" | "generate" | null>(
+  const [modalOption, setModalOption] = useState<
+    "gallery" | "upload" | "video" | "generate" | null
+  >(
     null
   );
   const [galleryTab, setGalleryTab] = useState<"shopify" | "app">("shopify");
@@ -886,6 +1165,72 @@ export default function BannerEdit() {
   const [customCssDraft, setCustomCssDraft] = useState(banner.customCss || "");
   const [layoutValue, setLayoutValue] = useState(banner.layout);
   const [sliderTypeValue, setSliderTypeValue] = useState(banner.sliderType || "slide");
+  const [sliderShowArrows, setSliderShowArrows] = useState(banner.sliderShowArrows ?? true);
+  const [sliderShowBullets, setSliderShowBullets] = useState(banner.sliderShowBullets ?? true);
+  const [sliderAutoplay, setSliderAutoplay] = useState(banner.sliderAutoplay ?? false);
+  const [sliderLoop, setSliderLoop] = useState(banner.sliderLoop ?? true);
+  const [sliderPerView, setSliderPerView] = useState(
+    String(banner.sliderPerView ?? 1)
+  );
+  const [sliderSpeed, setSliderSpeed] = useState(banner.sliderSpeed || "regular");
+  const [sliderAutoplayDelay, setSliderAutoplayDelay] = useState(
+    String(banner.sliderAutoplayDelay ?? 3500)
+  );
+  const [sliderCentered, setSliderCentered] = useState(banner.sliderCentered ?? false);
+  const [sliderSpaceBetween, setSliderSpaceBetween] = useState(
+    String(banner.sliderSpaceBetween ?? 16)
+  );
+  const [sliderPauseOnHover, setSliderPauseOnHover] = useState(
+    banner.sliderPauseOnHover ?? true
+  );
+  const [announcementClosableValue, setAnnouncementClosableValue] = useState(
+    banner.announcementClosable ?? false
+  );
+  const [advancedValues, setAdvancedValues] = useState(() => ({
+    bannerBackgroundColor: banner.bannerBackgroundColor || "",
+    titleFontSize: banner.titleFontSize || "lg",
+    descriptionFontSize: banner.descriptionFontSize || "md",
+    titleColor: banner.titleColor || "",
+    descriptionColor: banner.descriptionColor || "",
+    ctaTextColor: banner.ctaTextColor || "",
+    ctaBackgroundColor: banner.ctaBackgroundColor || "",
+    ctaBorderColor: banner.ctaBorderColor || "",
+    ctaBordered: banner.ctaBordered ?? false,
+    ctaRounded: banner.ctaRounded ?? true,
+    ctaShadow: banner.ctaShadow ?? false,
+    countdownTextColor: banner.countdownTextColor || "",
+    countdownBackgroundColor: banner.countdownBackgroundColor || "",
+    countdownStyle: banner.countdownStyle || "solid",
+    announcementMarquee: banner.announcementMarquee ?? false,
+    announcementAnimation: banner.announcementAnimation || "none",
+    announcementCloseColor: banner.announcementCloseColor || "",
+    sliderArrowStyle: banner.sliderArrowStyle || "chevron",
+    sliderArrowColor: banner.sliderArrowColor || "",
+    sliderBulletColor: banner.sliderBulletColor || "",
+  }));
+  const [advancedDraft, setAdvancedDraft] = useState(advancedValues);
+  const [announcementText, setAnnouncementText] = useState(banner.announcementText || "");
+  const [announcementCtaText, setAnnouncementCtaText] = useState(
+    banner.announcementCtaText || ""
+  );
+  const [announcementCtaUrl, setAnnouncementCtaUrl] = useState(
+    banner.announcementCtaUrl || ""
+  );
+  const [announcementShowCountdown, setAnnouncementShowCountdown] = useState(
+    Boolean(banner.announcementShowCountdown)
+  );
+  const [announcementCountdownMode, setAnnouncementCountdownMode] = useState(
+    banner.announcementCountdownMode || "fixed"
+  );
+  const [announcementCountdownEndAt, setAnnouncementCountdownEndAt] = useState(
+    banner.announcementCountdownEndAt || ""
+  );
+  const [announcementCountdownTimezone, setAnnouncementCountdownTimezone] = useState(
+    banner.announcementCountdownTimezone || "UTC"
+  );
+  const [announcementCountdownDurationHours, setAnnouncementCountdownDurationHours] = useState(
+    banner.announcementCountdownDurationHours || "1"
+  );
   const [statusValue, setStatusValue] = useState(
     banner.status === "scheduled" ? "draft" : banner.status
   );
@@ -922,6 +1267,11 @@ export default function BannerEdit() {
   const [aiDetails, setAiDetails] = useState("");
   const [aiTextTitle, setAiTextTitle] = useState("");
   const [aiTextDescription, setAiTextDescription] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoAutoplay, setVideoAutoplay] = useState(false);
+  const [videoMuted, setVideoMuted] = useState(false);
+  const [videoLoop, setVideoLoop] = useState(false);
+  const [videoHideControls, setVideoHideControls] = useState(false);
   const [previewItem, setPreviewItem] = useState<{
     url: string;
     title: string;
@@ -930,6 +1280,12 @@ export default function BannerEdit() {
   } | null>(null);
   const [embedOpen, setEmbedOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [itemEditorOpen, setItemEditorOpen] = useState(false);
+  const [itemEditor, setItemEditor] = useState<any | null>(null);
+  const [itemEditorTab, setItemEditorTab] = useState(0);
+  const [itemTagsDraft, setItemTagsDraft] = useState<Record<string, any>>({});
+  const [contentDragIndex, setContentDragIndex] = useState<number | null>(null);
   const [copiedBannerId, setCopiedBannerId] = useState(false);
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
 
@@ -956,7 +1312,46 @@ export default function BannerEdit() {
       descriptionInternal?: string;
       layout?: string;
       sliderType?: string;
+      sliderShowArrows?: boolean;
+      sliderShowBullets?: boolean;
+      sliderAutoplay?: boolean;
+      sliderLoop?: boolean;
+      sliderPerView?: string;
+      sliderSpeed?: string;
+      sliderAutoplayDelay?: string;
+      sliderCentered?: boolean;
+      sliderSpaceBetween?: string;
+      sliderPauseOnHover?: boolean;
+      sliderArrowStyle?: string;
+      sliderArrowColor?: string;
+      sliderBulletColor?: string;
       status?: string;
+      announcementText?: string;
+      announcementCtaText?: string;
+      announcementCtaUrl?: string;
+      announcementClosable?: boolean;
+      announcementCloseColor?: string;
+      announcementMarquee?: boolean;
+      announcementAnimation?: string;
+      announcementShowCountdown?: boolean;
+      announcementCountdownMode?: string;
+      announcementCountdownEndAt?: string;
+      announcementCountdownTimezone?: string;
+      announcementCountdownDurationHours?: string;
+      bannerBackgroundColor?: string;
+      titleFontSize?: string;
+      descriptionFontSize?: string;
+      titleColor?: string;
+      descriptionColor?: string;
+      ctaTextColor?: string;
+      ctaBackgroundColor?: string;
+      ctaBorderColor?: string;
+      ctaBordered?: boolean;
+      ctaRounded?: boolean;
+      ctaShadow?: boolean;
+      countdownTextColor?: string;
+      countdownBackgroundColor?: string;
+      countdownStyle?: string;
       customCss?: string;
     }) => {
       const formData = new FormData();
@@ -965,17 +1360,139 @@ export default function BannerEdit() {
       formData.set("descriptionInternal", next?.descriptionInternal ?? descriptionValue);
       formData.set("layout", next?.layout ?? layoutValue);
       formData.set("sliderType", next?.sliderType ?? sliderTypeValue);
+      formData.set(
+        "sliderShowArrows",
+        String(next?.sliderShowArrows ?? sliderShowArrows)
+      );
+      formData.set(
+        "sliderShowBullets",
+        String(next?.sliderShowBullets ?? sliderShowBullets)
+      );
+      formData.set("sliderAutoplay", String(next?.sliderAutoplay ?? sliderAutoplay));
+      formData.set("sliderLoop", String(next?.sliderLoop ?? sliderLoop));
+      formData.set("sliderPerView", next?.sliderPerView ?? sliderPerView);
+      formData.set("sliderSpeed", next?.sliderSpeed ?? sliderSpeed);
+      formData.set("sliderAutoplayDelay", next?.sliderAutoplayDelay ?? sliderAutoplayDelay);
+      formData.set("sliderCentered", String(next?.sliderCentered ?? sliderCentered));
+      formData.set("sliderSpaceBetween", next?.sliderSpaceBetween ?? sliderSpaceBetween);
+      formData.set("sliderPauseOnHover", String(next?.sliderPauseOnHover ?? sliderPauseOnHover));
+      formData.set(
+        "sliderArrowStyle",
+        next?.sliderArrowStyle ?? advancedValues.sliderArrowStyle
+      );
+      formData.set(
+        "sliderArrowColor",
+        next?.sliderArrowColor ?? advancedValues.sliderArrowColor
+      );
+      formData.set(
+        "sliderBulletColor",
+        next?.sliderBulletColor ?? advancedValues.sliderBulletColor
+      );
       formData.set("status", next?.status ?? statusValue);
+      formData.set("announcementText", next?.announcementText ?? announcementText);
+      formData.set("announcementCtaText", next?.announcementCtaText ?? announcementCtaText);
+      formData.set("announcementCtaUrl", next?.announcementCtaUrl ?? announcementCtaUrl);
+      formData.set(
+        "announcementClosable",
+        String(next?.announcementClosable ?? announcementClosableValue)
+      );
+      formData.set(
+        "announcementCloseColor",
+        next?.announcementCloseColor ?? advancedValues.announcementCloseColor
+      );
+      formData.set(
+        "announcementMarquee",
+        String(next?.announcementMarquee ?? advancedValues.announcementMarquee)
+      );
+      formData.set(
+        "announcementAnimation",
+        next?.announcementAnimation ?? advancedValues.announcementAnimation
+      );
+      formData.set(
+        "announcementShowCountdown",
+        String(next?.announcementShowCountdown ?? announcementShowCountdown)
+      );
+      formData.set(
+        "announcementCountdownMode",
+        next?.announcementCountdownMode ?? announcementCountdownMode
+      );
+      formData.set(
+        "announcementCountdownEndAt",
+        next?.announcementCountdownEndAt ?? announcementCountdownEndAt
+      );
+      formData.set(
+        "announcementCountdownTimezone",
+        next?.announcementCountdownTimezone ?? announcementCountdownTimezone
+      );
+      formData.set(
+        "announcementCountdownDurationHours",
+        next?.announcementCountdownDurationHours ?? announcementCountdownDurationHours
+      );
+      formData.set(
+        "bannerBackgroundColor",
+        next?.bannerBackgroundColor ?? advancedValues.bannerBackgroundColor
+      );
+      formData.set("titleFontSize", next?.titleFontSize ?? advancedValues.titleFontSize);
+      formData.set(
+        "descriptionFontSize",
+        next?.descriptionFontSize ?? advancedValues.descriptionFontSize
+      );
+      formData.set("titleColor", next?.titleColor ?? advancedValues.titleColor);
+      formData.set(
+        "descriptionColor",
+        next?.descriptionColor ?? advancedValues.descriptionColor
+      );
+      formData.set("ctaTextColor", next?.ctaTextColor ?? advancedValues.ctaTextColor);
+      formData.set(
+        "ctaBackgroundColor",
+        next?.ctaBackgroundColor ?? advancedValues.ctaBackgroundColor
+      );
+      formData.set("ctaBorderColor", next?.ctaBorderColor ?? advancedValues.ctaBorderColor);
+      formData.set("ctaBordered", String(next?.ctaBordered ?? advancedValues.ctaBordered));
+      formData.set("ctaRounded", String(next?.ctaRounded ?? advancedValues.ctaRounded));
+      formData.set("ctaShadow", String(next?.ctaShadow ?? advancedValues.ctaShadow));
+      formData.set(
+        "countdownTextColor",
+        next?.countdownTextColor ?? advancedValues.countdownTextColor
+      );
+      formData.set(
+        "countdownBackgroundColor",
+        next?.countdownBackgroundColor ?? advancedValues.countdownBackgroundColor
+      );
+      formData.set(
+        "countdownStyle",
+        next?.countdownStyle ?? advancedValues.countdownStyle
+      );
       formData.set("customCss", next?.customCss ?? customCssValue);
       updateFetcher.submit(formData, { method: "post" });
     },
     [
+      announcementCtaText,
+      announcementCtaUrl,
+      announcementCountdownDurationHours,
+      announcementCountdownEndAt,
+      announcementCountdownMode,
+      announcementCountdownTimezone,
+      announcementShowCountdown,
+      announcementText,
       customCssValue,
       descriptionValue,
       layoutValue,
       sliderTypeValue,
+      sliderShowArrows,
+      sliderShowBullets,
+      sliderAutoplay,
+      sliderLoop,
+      sliderPerView,
+      sliderSpeed,
+      sliderAutoplayDelay,
+      sliderCentered,
+      sliderSpaceBetween,
+      sliderPauseOnHover,
+      advancedValues,
       statusValue,
       titleValue,
+      announcementClosableValue,
       updateFetcher,
     ]
   );
@@ -1058,13 +1575,117 @@ export default function BannerEdit() {
     setGenerationTaskId("");
     setModalError("");
     setUploadedImage(null);
+    setVideoUrl("");
+    setVideoAutoplay(false);
+    setVideoMuted(false);
+    setVideoLoop(false);
+    setVideoHideControls(false);
   }, []);
+
+  useEffect(() => {
+    if (!itemEditorOpen || !itemEditor) return;
+    const defaultTags = {
+      showOverlay: false,
+      showTextOverlay: false,
+      textTitle: "",
+      textDescription: "",
+      textPosition: "bottom_left",
+      showCta: false,
+      ctaText: "",
+      ctaUrl: "",
+      showCountdown: false,
+      countdownMode: "fixed",
+      countdownEndAt: "",
+      countdownTimezone: "UTC",
+      countdownDurationHours: "1",
+      contentOrder: ["title", "description", "cta", "countdown"],
+      showControls: true,
+    };
+    setItemTagsDraft({
+      ...defaultTags,
+      ...(itemEditor.tags || {}),
+    });
+  }, [itemEditorOpen, itemEditor]);
 
   useEffect(() => {
     if (attachFetcher.data && "success" in attachFetcher.data && attachFetcher.data.success) {
       handleModalClose();
     }
   }, [attachFetcher.data, handleModalClose]);
+
+  useEffect(() => {
+    if (videoFetcher.data && "success" in videoFetcher.data && videoFetcher.data.success) {
+      handleModalClose();
+      setVideoUrl("");
+      setVideoAutoplay(false);
+      setVideoMuted(false);
+      setVideoLoop(false);
+      setVideoHideControls(false);
+    }
+  }, [videoFetcher.data, handleModalClose]);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    fetch(`/app/banners/${banner.id}/preview${editSearch}`)
+      .then((res) => res.text())
+      .then((html) => setPreviewHtml(html))
+      .catch(() => setPreviewHtml("<p>Unable to load preview.</p>"));
+  }, [previewOpen, banner.id, editSearch]);
+
+  useEffect(() => {
+    if (previewOpen) return;
+    setPreviewHtml("");
+  }, [previewOpen]);
+
+  useEffect(() => {
+    if (!advancedOpen) return;
+    setAdvancedDraft(advancedValues);
+  }, [advancedOpen, advancedValues]);
+
+  const updateItemTagsDraft = useCallback(
+    (updates: Record<string, any>) => {
+      setItemTagsDraft((prev) => ({ ...prev, ...updates }));
+    },
+    []
+  );
+
+  const updateAdvancedDraft = useCallback(
+    (updates: Record<string, any>) => {
+      setAdvancedDraft((prev) => ({ ...prev, ...updates }));
+    },
+    []
+  );
+
+  const renderColorField = useCallback(
+    (label: string, value: string, onChange: (next: string) => void) => (
+      <div className="bainners-color-field">
+        <Text as="p" variant="bodySm">
+          {label}
+        </Text>
+        <input
+          type="color"
+          value={value || "#000000"}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+      </div>
+    ),
+    []
+  );
+  const handleContentDragOver = useCallback((targetIndex: number) => {
+    setItemTagsDraft((prev) => {
+      const order = Array.isArray(prev.contentOrder)
+        ? [...prev.contentOrder]
+        : ["title", "description", "cta", "countdown"];
+      if (contentDragIndex === null || contentDragIndex === targetIndex) {
+        return prev;
+      }
+      const next = [...order];
+      const [moved] = next.splice(contentDragIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      setContentDragIndex(targetIndex);
+      return { ...prev, contentOrder: next };
+    });
+  }, [contentDragIndex]);
 
   const handleGenerateSubmit = useCallback(
     (formData: FormData) => {
@@ -1371,7 +1992,11 @@ export default function BannerEdit() {
                 <Button variant="secondary" onClick={() => setPreviewOpen(true)}>
                   Preview
                 </Button>
-                <Button variant="primary" onClick={() => setEmbedOpen(true)}>
+                <Button
+                  variant="primary"
+                  onClick={() => setEmbedOpen(true)}
+                  disabled={statusValue !== "active"}
+                >
                   Embed banner
                 </Button>
               </InlineStack>
@@ -1398,9 +2023,30 @@ export default function BannerEdit() {
           <Card>
             <BlockStack gap="300">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">
-                  Configuration
-                </Text>
+                <InlineStack gap="300" blockAlign="center">
+                  <Text as="h2" variant="headingMd">
+                    Configuration
+                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <label className="bainners-switch">
+                      <input
+                        type="checkbox"
+                        checked={statusValue === "active"}
+                        onChange={(event) => {
+                          const nextStatus = event.currentTarget.checked ? "active" : "draft";
+                          setStatusValue(nextStatus);
+                          saveBanner({ status: nextStatus });
+                        }}
+                      />
+                      <span className="bainners-switch-track">
+                        <span className="bainners-switch-thumb" />
+                      </span>
+                    </label>
+                    <Text as="span" variant="bodySm">
+                      {statusValue === "active" ? "Published" : "Draft"}
+                    </Text>
+                  </InlineStack>
+                </InlineStack>
                 <Button
                   variant="tertiary"
                   onClick={() => {
@@ -1412,245 +2058,507 @@ export default function BannerEdit() {
                 </Button>
               </InlineStack>
               <FormLayout>
-                <Select
-                  label="Layout"
-                  name="layout"
-                  options={[
-                    { label: "Hero Banner", value: "hero" },
-                    { label: "Slider", value: "slider" },
-                    { label: "Promo Strip", value: "promo_strip" },
-                    { label: "Product Highlight", value: "product_highlight" },
-                  ]}
-                  value={layoutValue}
-                  onChange={(value) => {
-                    setLayoutValue(value);
-                    saveBanner({ layout: value });
-                  }}
-                />
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm">
+                    Layout
+                  </Text>
+                  <div className="bainners-layout-grid">
+                    <button
+                      type="button"
+                      className={`bainners-option-card${
+                        layoutValue === "announcement" ? " bainners-option-card--selected" : ""
+                      }`}
+                      onClick={() => {
+                        setLayoutValue("announcement");
+                        saveBanner({ layout: "announcement" });
+                      }}
+                    >
+                      <div className="bainners-option-card__icon">
+                        <Icon source={MegaphoneIcon} />
+                      </div>
+                      <Text as="p" variant="headingMd">
+                        Announcement
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Single line + CTA + countdown
+                      </Text>
+                    </button>
+                    <button
+                      type="button"
+                      className={`bainners-option-card${
+                        layoutValue === "hero" ? " bainners-option-card--selected" : ""
+                      }`}
+                      onClick={() => {
+                        setLayoutValue("hero");
+                        saveBanner({ layout: "hero" });
+                      }}
+                    >
+                      <div className="bainners-option-card__icon">
+                        <Icon source={ImageIcon} />
+                      </div>
+                      <Text as="p" variant="headingMd">
+                        Hero
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Single image or video
+                      </Text>
+                    </button>
+                    <button
+                      type="button"
+                      className={`bainners-option-card${
+                        layoutValue === "slider" ? " bainners-option-card--selected" : ""
+                      }`}
+                      onClick={() => {
+                        setLayoutValue("slider");
+                        saveBanner({ layout: "slider" });
+                      }}
+                    >
+                      <div className="bainners-option-card__icon">
+                        <Icon source={SlideshowIcon} />
+                      </div>
+                      <Text as="p" variant="headingMd">
+                        Slider
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Multiple items with transitions
+                      </Text>
+                    </button>
+                  </div>
+                </BlockStack>
                 {layoutValue === "slider" ? (
-                  <Select
-                    label="Slider type"
-                    name="sliderType"
-                    options={[
-                      { label: "Slide", value: "slide" },
-                      { label: "Fade", value: "fade" },
-                      { label: "Coverflow", value: "coverflow" },
-                      { label: "Cards", value: "cards" },
-                      { label: "Creative", value: "creative" },
-                      { label: "Flip", value: "flip" },
-                    ]}
-                    value={sliderTypeValue}
-                    onChange={(value) => {
-                      setSliderTypeValue(value);
-                      saveBanner({ sliderType: value });
-                    }}
-                  />
+                  <BlockStack gap="200">
+                    <Select
+                      label="Slider type"
+                      name="sliderType"
+                      options={[
+                        { label: "Slide", value: "slide" },
+                        { label: "Fade", value: "fade" },
+                        { label: "Coverflow", value: "coverflow" },
+                        { label: "Cards", value: "cards" },
+                        { label: "Creative", value: "creative" },
+                        { label: "Flip", value: "flip" },
+                      ]}
+                      value={sliderTypeValue}
+                      onChange={(value) => {
+                        setSliderTypeValue(value);
+                        saveBanner({ sliderType: value });
+                      }}
+                    />
+                    <InlineStack gap="300" align="start">
+                      <Checkbox
+                        label="Show arrows"
+                        checked={sliderShowArrows}
+                        onChange={(value) => {
+                          setSliderShowArrows(value);
+                          saveBanner({ sliderShowArrows: value });
+                        }}
+                      />
+                      <Checkbox
+                        label="Show bullets"
+                        checked={sliderShowBullets}
+                        onChange={(value) => {
+                          setSliderShowBullets(value);
+                          saveBanner({ sliderShowBullets: value });
+                        }}
+                      />
+                      <Checkbox
+                        label="Centered slides"
+                        checked={sliderCentered}
+                        onChange={(value) => {
+                          setSliderCentered(value);
+                          saveBanner({ sliderCentered: value });
+                        }}
+                      />
+                    </InlineStack>
+                    <InlineStack gap="300" align="start">
+                      <Checkbox
+                        label="Autoplay"
+                        checked={sliderAutoplay}
+                        onChange={(value) => {
+                          setSliderAutoplay(value);
+                          saveBanner({ sliderAutoplay: value });
+                        }}
+                      />
+                      <Checkbox
+                        label="Loop"
+                        checked={sliderLoop}
+                        onChange={(value) => {
+                          setSliderLoop(value);
+                          saveBanner({ sliderLoop: value });
+                        }}
+                      />
+                      <Checkbox
+                        label="Pause on hover"
+                        checked={sliderPauseOnHover}
+                        onChange={(value) => {
+                          setSliderPauseOnHover(value);
+                          saveBanner({ sliderPauseOnHover: value });
+                        }}
+                      />
+                    </InlineStack>
+                    <InlineStack gap="300" align="start" className="bainners-slider-row">
+                      <div className="bainners-slider-field">
+                        <Select
+                          label="Transition speed"
+                          options={[
+                            { label: "Regular", value: "regular" },
+                            { label: "Slow", value: "slow" },
+                            { label: "Fast", value: "fast" },
+                          ]}
+                          value={sliderSpeed}
+                          onChange={(value) => {
+                            setSliderSpeed(value);
+                            saveBanner({ sliderSpeed: value });
+                          }}
+                        />
+                      </div>
+                      <div className="bainners-slider-field">
+                        <TextField
+                          label="Items per view"
+                          type="number"
+                          value={sliderPerView}
+                          onChange={(value) => {
+                            const sanitized = value === "" ? "1" : value;
+                            setSliderPerView(sanitized);
+                            saveBanner({ sliderPerView: sanitized });
+                          }}
+                          min={1}
+                          step={0.1}
+                        />
+                      </div>
+                      {sliderAutoplay ? (
+                        <div className="bainners-slider-field">
+                          <TextField
+                            label="Autoplay delay (ms)"
+                            type="number"
+                            value={sliderAutoplayDelay}
+                            onChange={(value) => {
+                              const sanitized = value === "" ? "3500" : value;
+                              setSliderAutoplayDelay(sanitized);
+                              saveBanner({ sliderAutoplayDelay: sanitized });
+                            }}
+                            min={500}
+                            step={500}
+                          />
+                        </div>
+                      ) : null}
+                    </InlineStack>
+                    {Number(sliderPerView) > 1 ? (
+                      <TextField
+                        label="Space between (px)"
+                        type="number"
+                        value={sliderSpaceBetween}
+                        onChange={(value) => {
+                          const sanitized = value === "" ? "16" : value;
+                          setSliderSpaceBetween(sanitized);
+                          saveBanner({ sliderSpaceBetween: sanitized });
+                        }}
+                        min={0}
+                        step={1}
+                      />
+                    ) : null}
+                  </BlockStack>
                 ) : null}
-                <Select
-                  label="Status"
-                  name="status"
-                  options={[
-                    { label: "Draft", value: "draft" },
-                    { label: "Published", value: "active" },
-                    { label: "Archived", value: "archived" },
-                  ]}
-                  value={statusValue}
-                  onChange={(value) => {
-                    setStatusValue(value);
-                    saveBanner({ status: value });
-                  }}
-                />
+                {layoutValue === "announcement" ? (
+                  <BlockStack gap="200">
+                    <TextField
+                      label="Announcement text"
+                      value={announcementText}
+                      onChange={(value) => {
+                        setAnnouncementText(value);
+                        saveBanner({ announcementText: value });
+                      }}
+                      placeholder="Your announcement text"
+                      multiline={2}
+                    />
+                    <TextField
+                      label="CTA text"
+                      value={announcementCtaText}
+                      onChange={(value) => {
+                        setAnnouncementCtaText(value);
+                        saveBanner({ announcementCtaText: value });
+                      }}
+                      placeholder="Learn more"
+                    />
+                    <TextField
+                      label="CTA URL"
+                      value={announcementCtaUrl}
+                      onChange={(value) => {
+                        setAnnouncementCtaUrl(value);
+                        saveBanner({ announcementCtaUrl: value });
+                      }}
+                      placeholder="https://"
+                    />
+                    <Checkbox
+                      label="Allow close"
+                      checked={announcementClosableValue}
+                      onChange={(value) => {
+                        setAnnouncementClosableValue(value);
+                        saveBanner({ announcementClosable: value });
+                      }}
+                    />
+                    <Checkbox
+                      label="Show countdown"
+                      checked={announcementShowCountdown}
+                      onChange={(value) => {
+                        setAnnouncementShowCountdown(value);
+                        saveBanner({ announcementShowCountdown: value });
+                      }}
+                    />
+                    {announcementShowCountdown ? (
+                      <BlockStack gap="200">
+                        <Select
+                          label="Mode"
+                          options={[
+                            { label: "Fixed end time", value: "fixed" },
+                            { label: "Evergreen (relative)", value: "evergreen" },
+                          ]}
+                          value={announcementCountdownMode}
+                          onChange={(value) => {
+                            setAnnouncementCountdownMode(value);
+                            saveBanner({ announcementCountdownMode: value });
+                          }}
+                        />
+                        {announcementCountdownMode === "evergreen" ? (
+                          <TextField
+                            label="Duration (hours)"
+                            type="number"
+                            value={announcementCountdownDurationHours}
+                            onChange={(value) => {
+                              setAnnouncementCountdownDurationHours(value);
+                              saveBanner({ announcementCountdownDurationHours: value });
+                            }}
+                          />
+                        ) : (
+                          <TextField
+                            label="End date"
+                            type="datetime-local"
+                            value={announcementCountdownEndAt}
+                            onChange={(value) => {
+                              setAnnouncementCountdownEndAt(value);
+                              saveBanner({ announcementCountdownEndAt: value });
+                            }}
+                          />
+                        )}
+                        <TextField
+                          label="Timezone"
+                          value={announcementCountdownTimezone}
+                          onChange={(value) => {
+                            setAnnouncementCountdownTimezone(value);
+                            saveBanner({ announcementCountdownTimezone: value });
+                          }}
+                        />
+                      </BlockStack>
+                    ) : null}
+                  </BlockStack>
+                ) : null}
               </FormLayout>
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="300">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text variant="headingMd" as="h2">
-                  Banner Images
-                </Text>
-                {orderedItems.length > 0 && layoutValue !== "hero" ? (
-                  <Button
-                    onClick={() => setModalOpen(true)}
-                    variant="primary"
-                    disabled={layoutValue === "hero" && orderedItems.length >= 1}
-                  >
-                    Add Image
-                  </Button>
-                ) : null}
-              </InlineStack>
-              {orderedItems.length === 0 ? (
-                <EmptyState
-                  heading="No images yet"
-                  action={{
-                    content: "Add Image",
-                    onAction: () => setModalOpen(true),
-                    primary: true,
-                  }}
-                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                >
-                  <p>Add an image to start building this banner.</p>
-                </EmptyState>
-              ) : (
-                <BlockStack gap="300">
-                  {(layoutValue === "hero" ? orderedItems.slice(0, 1) : orderedItems).map(
-                    (item, index) => (
-                    <div
-                      key={item.id}
-                      draggable
-                      onDragStart={() => handleDragStart(index)}
-                      onDragOver={(e) => handleDragOver(e, index)}
-                      onDragEnd={handleDragEnd}
-                      style={{
-                        cursor: "move",
-                        backgroundColor: draggedIndex === index ? "#f6f6f7" : "transparent",
-                        transition: "background-color 0.2s",
-                        borderRadius: "8px",
-                      }}
+        {layoutValue !== "announcement" ? (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text variant="headingMd" as="h2">
+                    Banner Items
+                  </Text>
+                  {orderedItems.length > 0 && layoutValue !== "hero" ? (
+                    <Button
+                      onClick={() => setModalOpen(true)}
+                      variant="primary"
+                      disabled={layoutValue === "hero" && orderedItems.length >= 1}
                     >
-                      <Card padding="400">
-                        <InlineStack gap="400" align="start" blockAlign="center">
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "2px",
-                              cursor: "move",
-                              alignSelf: "center",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: "12px",
-                                height: "2px",
-                                backgroundColor: "#8c9196",
-                              }}
-                            />
-                            <div
-                              style={{
-                                width: "12px",
-                                height: "2px",
-                                backgroundColor: "#8c9196",
-                              }}
-                            />
-                            <div
-                              style={{
-                                width: "12px",
-                                height: "2px",
-                                backgroundColor: "#8c9196",
-                              }}
-                            />
-                          </div>
-                            <button
-                              type="button"
-                              className="bainners-image-thumb bainners-image-thumb--large"
-                              onClick={() =>
-                              setPreviewItem({
-                                url: item.imageUrl,
-                                title: item.title,
-                                sizeInMB: item.sizeInMB,
-                                sourceType: item.sourceType,
-                              })
-                              }
-                            >
-                            <img src={item.imageUrl} alt={item.title} />
-                            <span className="bainners-image-overlay">
-                              <Icon source={SearchIcon} tone="base" />
-                            </span>
-                            <div className="bainners-banner-tags">
-                              {item.isSelected && <Badge tone="success">Selected</Badge>}
-                              <Badge tone="info">{item.sourceType}</Badge>
-                            </div>
-                          </button>
-                          <BlockStack gap="100">
-                            <Checkbox
-                              label="Show overlay"
-                              checked={Boolean(item.tags?.showOverlay)}
-                              onChange={(value) =>
-                                updateBannerItem(item.id, { showOverlay: value })
-                              }
-                            />
-                            <BlockStack gap="200">
-                              <Checkbox
-                                label="Show text overlay"
-                                checked={Boolean(item.tags?.showTextOverlay)}
-                                onChange={(value) =>
-                                  updateBannerItem(item.id, { showTextOverlay: value })
-                                }
-                              />
-                              {item.tags?.showTextOverlay && (
-                                <InlineStack gap="200" blockAlign="center">
-                                  <TextField
-                                    label="Overlay title"
-                                    value={item.tags?.textTitle || ""}
-                                    onChange={(value) =>
-                                      updateBannerItem(item.id, { textTitle: value })
-                                    }
-                                  />
-                                  <TextField
-                                    label="Overlay description"
-                                    value={item.tags?.textDescription || ""}
-                                    onChange={(value) =>
-                                      updateBannerItem(item.id, { textDescription: value })
-                                    }
-                                  />
-                                </InlineStack>
-                              )}
-                            </BlockStack>
-                            <BlockStack gap="200">
-                              <Checkbox
-                                label="Show CTA"
-                                checked={Boolean(item.tags?.showCta)}
-                                onChange={(value) => updateBannerItem(item.id, { showCta: value })}
-                              />
-                              {item.tags?.showCta && (
-                                <InlineStack gap="200" blockAlign="center">
-                                  <TextField
-                                    label="CTA text"
-                                    value={item.tags?.ctaText || ""}
-                                    onChange={(value) =>
-                                      updateBannerItem(item.id, { ctaText: value })
-                                    }
-                                  />
-                                  <TextField
-                                    label="CTA URL"
-                                    value={item.tags?.ctaUrl || ""}
-                                    onChange={(value) =>
-                                      updateBannerItem(item.id, { ctaUrl: value })
-                                    }
-                                  />
-                                </InlineStack>
-                              )}
-                            </BlockStack>
-                            <div className="bainners-banner-item-actions">
-                              <Button
-                                size="slim"
-                                tone="critical"
-                                onClick={() => {
-                                  if (!confirm("Remove this image from the banner?")) return;
-                                  const formData = new FormData();
-                                  formData.set("action", "remove-banner-item");
-                                  formData.set("itemId", item.id);
-                                  removeItemFetcher.submit(formData, { method: "post" });
+                      Add item
+                    </Button>
+                  ) : null}
+                </InlineStack>
+                {orderedItems.length === 0 ? (
+                  <EmptyState
+                    heading="No items yet"
+                    action={{
+                      content: "Add item",
+                      onAction: () => setModalOpen(true),
+                      primary: true,
+                    }}
+                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                  >
+                    <p>Add an item to start building this banner.</p>
+                  </EmptyState>
+                ) : (
+                  <BlockStack gap="300">
+                    {(layoutValue === "hero" ? orderedItems.slice(0, 1) : orderedItems).map(
+                      (item, index) => (
+                        <div
+                          key={item.id}
+                          draggable
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragEnd={handleDragEnd}
+                          style={{
+                            cursor: "move",
+                            backgroundColor: draggedIndex === index ? "#f6f6f7" : "transparent",
+                            transition: "background-color 0.2s",
+                            borderRadius: "8px",
+                          }}
+                        >
+                          <Card padding="400">
+                            <InlineStack gap="400" align="start" blockAlign="center">
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "2px",
+                                  cursor: "move",
+                                  alignSelf: "center",
                                 }}
                               >
-                                Remove
-                              </Button>
-                            </div>
-                          </BlockStack>
-                        </InlineStack>
-                      </Card>
-                    </div>
-                  )
-                  )}
-                </BlockStack>
-              )}
-            </BlockStack>
-          </Card>
-        </Layout.Section>
+                                <div
+                                  style={{
+                                    width: "12px",
+                                    height: "2px",
+                                    backgroundColor: "#8c9196",
+                                  }}
+                                />
+                                <div
+                                  style={{
+                                    width: "12px",
+                                    height: "2px",
+                                    backgroundColor: "#8c9196",
+                                  }}
+                                />
+                                <div
+                                  style={{
+                                    width: "12px",
+                                    height: "2px",
+                                    backgroundColor: "#8c9196",
+                                  }}
+                                />
+                              </div>
+                              {item.tags?.mediaType === "video" ? (
+                                <button
+                                  type="button"
+                                  className="bainners-video-thumb bainners-image-thumb--large"
+                                  onClick={() => {
+                                    if (item.tags?.videoUrl) {
+                                      window.open(item.tags.videoUrl, "_blank", "noopener");
+                                    }
+                                  }}
+                                >
+                                  {item.tags?.videoThumbnailUrl ? (
+                                    <img src={item.tags.videoThumbnailUrl} alt="Video thumbnail" />
+                                  ) : (
+                                    <Icon source={ImageIcon} />
+                                  )}
+                                  <span className="bainners-image-overlay">
+                                    <Icon source={ViewIcon} tone="base" />
+                                  </span>
+                                  <div className="bainners-banner-tags">
+                                    <Badge tone="info">Video</Badge>
+                                  </div>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="bainners-image-thumb bainners-image-thumb--large"
+                                  onClick={() =>
+                                    setPreviewItem({
+                                      url: item.imageUrl,
+                                      title: item.title,
+                                      sizeInMB: item.sizeInMB,
+                                      sourceType: item.sourceType,
+                                    })
+                                  }
+                                >
+                                  <img src={item.imageUrl} alt={item.title} />
+                                  <span className="bainners-image-overlay">
+                                    <Icon source={SearchIcon} tone="base" />
+                                  </span>
+                                  <div className="bainners-banner-tags">
+                                    <Badge tone="info">{item.sourceType}</Badge>
+                                  </div>
+                                </button>
+                              )}
+                              <BlockStack gap="200">
+                                <div className="bainners-item-edit">
+                                  <Button
+                                    size="slim"
+                                    onClick={() => {
+                                      setItemEditor({ ...item });
+                                      setItemEditorOpen(true);
+                                    }}
+                                  >
+                                    Edit info
+                                  </Button>
+                                </div>
+                                {(Array.isArray(item.tags?.contentOrder)
+                                  ? item.tags.contentOrder
+                                  : ["title", "description", "cta", "countdown"]
+                                ).map((key: string) => {
+                                  if (key === "title" && item.tags?.textTitle) {
+                                    return (
+                                      <Text key={key} as="p" variant="bodySm">
+                                        Title: {item.tags.textTitle}
+                                      </Text>
+                                    );
+                                  }
+                                  if (key === "description" && item.tags?.textDescription) {
+                                    return (
+                                      <Text key={key} as="p" variant="bodySm">
+                                        Description: {item.tags.textDescription}
+                                      </Text>
+                                    );
+                                  }
+                                  if (key === "cta" && item.tags?.ctaText) {
+                                    return (
+                                      <Text key={key} as="p" variant="bodySm">
+                                        CTA: {item.tags.ctaText}
+                                      </Text>
+                                    );
+                                  }
+                                  if (key === "countdown" && item.tags?.showCountdown) {
+                                    return (
+                                      <Text key={key} as="p" variant="bodySm">
+                                        Countdown:{" "}
+                                        {item.tags?.countdownMode === "evergreen"
+                                          ? `Evergreen (${item.tags?.countdownDurationHours || "1"}h)`
+                                          : item.tags?.countdownEndAt
+                                          ? `Fixed (${item.tags.countdownEndAt})`
+                                          : "Fixed"}
+                                      </Text>
+                                    );
+                                  }
+                                  return null;
+                                })}
+                                <div className="bainners-banner-item-actions">
+                                  <Button
+                                    size="slim"
+                                    tone="critical"
+                                    onClick={() => {
+                                      if (!confirm("Remove this item from the banner?")) return;
+                                      const formData = new FormData();
+                                      formData.set("action", "remove-banner-item");
+                                      formData.set("itemId", item.id);
+                                      removeItemFetcher.submit(formData, { method: "post" });
+                                    }}
+                                  >
+                                    Remove
+                                  </Button>
+                                </div>
+                              </BlockStack>
+                            </InlineStack>
+                          </Card>
+                        </div>
+                      )
+                    )}
+                  </BlockStack>
+                )}
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        ) : null}
 
       </Layout>
 
@@ -1704,11 +2612,13 @@ export default function BannerEdit() {
                   ? "Gallery"
                   : modalOption === "upload"
                   ? "Upload image"
+                  : modalOption === "video"
+                  ? "Add video"
                   : "Generate with AI"}
               </Text>
             </InlineStack>
           ) : (
-            "Add Image"
+            "Add item"
           )
         }
         primaryAction={undefined}
@@ -1719,7 +2629,7 @@ export default function BannerEdit() {
             {!modalOption && (
               <BlockStack gap="400" align="center">
                 <Text as="p" variant="bodyMd" alignment="center">
-                  Choose how you want to add an image.
+                  Choose how you want to add an item.
                 </Text>
                 <div className="bainners-option-grid">
                   <button
@@ -1750,6 +2660,21 @@ export default function BannerEdit() {
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
                       Upload a new image from your device
+                    </Text>
+                  </button>
+                  <button
+                    type="button"
+                    className="bainners-option-card"
+                    onClick={() => setModalOption("video")}
+                  >
+                    <div className="bainners-option-card__icon">
+                      <Icon source={PlayCircleIcon} />
+                    </div>
+                    <Text as="p" variant="headingMd">
+                      Video
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Add a YouTube or Vimeo URL
                     </Text>
                   </button>
                   <button
@@ -1904,6 +2829,64 @@ export default function BannerEdit() {
                     Use Image
                   </Button>
                 </InlineStack>
+              </BlockStack>
+            )}
+
+            {modalOption === "video" && (
+              <BlockStack gap="300">
+                <BlockStack gap="200">
+                  <TextField
+                    label="Video URL"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={videoUrl}
+                    onChange={setVideoUrl}
+                  />
+                  <InlineStack gap="300">
+                    <Checkbox
+                      label="Autoplay"
+                      checked={videoAutoplay}
+                      onChange={setVideoAutoplay}
+                    />
+                    <Checkbox
+                      label="Muted"
+                      checked={videoMuted}
+                      onChange={setVideoMuted}
+                    />
+                    <Checkbox
+                      label="Loop"
+                      checked={videoLoop}
+                      onChange={setVideoLoop}
+                    />
+                    <Checkbox
+                      label="Hide controls"
+                      checked={videoHideControls}
+                      onChange={setVideoHideControls}
+                    />
+                  </InlineStack>
+                  {videoFetcher.data && "error" in videoFetcher.data ? (
+                    <PolarisBanner tone="critical" title="Video error">
+                      <p>{videoFetcher.data.error as string}</p>
+                    </PolarisBanner>
+                  ) : null}
+                  <InlineStack align="end">
+                    <Button
+                      primary
+                      disabled={!videoUrl}
+                      onClick={() => {
+                        const formData = new FormData();
+                        formData.set("action", "add-video");
+                        formData.set("videoUrl", videoUrl);
+                        formData.set("autoplay", String(videoAutoplay));
+                        formData.set("muted", String(videoMuted));
+                        formData.set("loop", String(videoLoop));
+                        formData.set("showControls", String(!videoHideControls));
+                        videoFetcher.submit(formData, { method: "post" });
+                      }}
+                    >
+                      Add video
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
               </BlockStack>
             )}
 
@@ -2277,6 +3260,245 @@ export default function BannerEdit() {
       </Modal>
 
       <Modal
+        open={itemEditorOpen}
+        onClose={() => setItemEditorOpen(false)}
+        title="Edit item info"
+        primaryAction={{
+          content: "Save",
+          onAction: () => {
+            if (!itemEditor?.id) return;
+            const nextTags = {
+              ...itemTagsDraft,
+              showTextOverlay:
+                Boolean(itemTagsDraft.textTitle) || Boolean(itemTagsDraft.textDescription),
+            };
+            const formData = new FormData();
+            formData.set("action", "update-banner-item");
+            formData.set("itemId", itemEditor.id);
+            formData.set("tagsJson", JSON.stringify(nextTags));
+            itemUpdateFetcher.submit(formData, { method: "post" });
+            setItemEditorOpen(false);
+          },
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: () => setItemEditorOpen(false),
+          },
+        ]}
+      >
+        <Modal.Section>
+          <Tabs
+            tabs={[
+              { id: "content", content: "Content", panelID: "content-panel" },
+              { id: "config", content: "Configuration", panelID: "config-panel" },
+            ]}
+            selected={itemEditorTab}
+            onSelect={setItemEditorTab}
+          />
+          {itemEditorTab === 0 ? (
+            <BlockStack gap="300" padding="300">
+              <Text as="p" variant="bodySm">
+                Reorder and toggle what appears on this item.
+              </Text>
+              {(Array.isArray(itemTagsDraft.contentOrder)
+                ? itemTagsDraft.contentOrder
+                : ["title", "description", "cta", "countdown"]
+              ).map((key: string, index: number) => (
+                <div
+                  key={key}
+                  draggable
+                  onDragStart={() => setContentDragIndex(index)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    handleContentDragOver(index);
+                  }}
+                  onDragEnd={() => setContentDragIndex(null)}
+                  className="bainners-content-card"
+                >
+                  <Card padding="300">
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="p" variant="headingSm">
+                        {key === "title"
+                          ? "Title"
+                          : key === "description"
+                          ? "Description"
+                          : key === "cta"
+                          ? "CTA"
+                          : "Countdown"}
+                      </Text>
+                    </InlineStack>
+
+                    {key === "title" && (
+                      <BlockStack gap="200">
+                        <Checkbox
+                          label="Show title"
+                          checked={Boolean(itemTagsDraft.textTitle)}
+                          onChange={(value) =>
+                            updateItemTagsDraft({ textTitle: value ? "Title" : "" })
+                          }
+                        />
+                        {itemTagsDraft.textTitle ? (
+                          <TextField
+                            label="Title"
+                            value={itemTagsDraft.textTitle || ""}
+                            onChange={(value) => updateItemTagsDraft({ textTitle: value })}
+                          />
+                        ) : null}
+                      </BlockStack>
+                    )}
+
+                    {key === "description" && (
+                      <BlockStack gap="200">
+                        <Checkbox
+                          label="Show description"
+                          checked={Boolean(itemTagsDraft.textDescription)}
+                          onChange={(value) =>
+                            updateItemTagsDraft({ textDescription: value ? "Description" : "" })
+                          }
+                        />
+                        {itemTagsDraft.textDescription ? (
+                          <TextField
+                            label="Description"
+                            value={itemTagsDraft.textDescription || ""}
+                            onChange={(value) => updateItemTagsDraft({ textDescription: value })}
+                            multiline={2}
+                          />
+                        ) : null}
+                      </BlockStack>
+                    )}
+
+                    {key === "cta" && (
+                      <BlockStack gap="200">
+                        <Checkbox
+                          label="Show CTA"
+                          checked={Boolean(itemTagsDraft.showCta)}
+                          onChange={(value) => updateItemTagsDraft({ showCta: value })}
+                        />
+                        {itemTagsDraft.showCta ? (
+                          <InlineStack gap="200" blockAlign="center">
+                            <TextField
+                              label="CTA text"
+                              value={itemTagsDraft.ctaText || ""}
+                              onChange={(value) => updateItemTagsDraft({ ctaText: value })}
+                            />
+                            <TextField
+                              label="CTA URL"
+                              value={itemTagsDraft.ctaUrl || ""}
+                              onChange={(value) => updateItemTagsDraft({ ctaUrl: value })}
+                            />
+                          </InlineStack>
+                        ) : null}
+                      </BlockStack>
+                    )}
+
+                    {key === "countdown" && (
+                      <BlockStack gap="200">
+                        <Checkbox
+                          label="Show countdown"
+                          checked={Boolean(itemTagsDraft.showCountdown)}
+                          onChange={(value) => updateItemTagsDraft({ showCountdown: value })}
+                        />
+                        {itemTagsDraft.showCountdown ? (
+                          <BlockStack gap="200">
+                            <Select
+                              label="Mode"
+                              options={[
+                                { label: "Fixed end time", value: "fixed" },
+                                { label: "Evergreen (relative)", value: "evergreen" },
+                              ]}
+                              value={itemTagsDraft.countdownMode || "fixed"}
+                              onChange={(value) => updateItemTagsDraft({ countdownMode: value })}
+                            />
+                            {itemTagsDraft.countdownMode === "evergreen" ? (
+                              <TextField
+                                label="Duration (hours)"
+                                type="number"
+                                value={itemTagsDraft.countdownDurationHours || "1"}
+                                onChange={(value) =>
+                                  updateItemTagsDraft({ countdownDurationHours: value })
+                                }
+                              />
+                            ) : (
+                              <TextField
+                                label="End date"
+                                type="datetime-local"
+                                value={itemTagsDraft.countdownEndAt || ""}
+                                onChange={(value) =>
+                                  updateItemTagsDraft({ countdownEndAt: value })
+                                }
+                              />
+                            )}
+                            <TextField
+                              label="Timezone"
+                              value={itemTagsDraft.countdownTimezone || "UTC"}
+                              onChange={(value) =>
+                                updateItemTagsDraft({ countdownTimezone: value })
+                              }
+                            />
+                          </BlockStack>
+                        ) : null}
+                      </BlockStack>
+                    )}
+                  </BlockStack>
+                  </Card>
+                </div>
+              ))}
+            </BlockStack>
+          ) : (
+            <BlockStack gap="300" padding="300">
+              <Checkbox
+                label="Show overlay"
+                checked={Boolean(itemTagsDraft.showOverlay)}
+                onChange={(value) => updateItemTagsDraft({ showOverlay: value })}
+              />
+              {itemEditor?.tags?.mediaType === "video" ? (
+                <BlockStack gap="200">
+                  <Checkbox
+                    label="Autoplay"
+                    checked={Boolean(itemTagsDraft.autoplay)}
+                    onChange={(value) => updateItemTagsDraft({ autoplay: value })}
+                  />
+                  <Checkbox
+                    label="Muted"
+                    checked={Boolean(itemTagsDraft.muted)}
+                    onChange={(value) => updateItemTagsDraft({ muted: value })}
+                  />
+                  <Checkbox
+                    label="Loop"
+                    checked={Boolean(itemTagsDraft.loop)}
+                    onChange={(value) => updateItemTagsDraft({ loop: value })}
+                  />
+                  <Checkbox
+                    label="Hide controls"
+                    checked={!Boolean(itemTagsDraft.showControls)}
+                    onChange={(value) => updateItemTagsDraft({ showControls: !value })}
+                  />
+                </BlockStack>
+              ) : null}
+              <Select
+                label="Text position"
+                options={[
+                  { label: "Top left", value: "top_left" },
+                  { label: "Top center", value: "top_center" },
+                  { label: "Top right", value: "top_right" },
+                  { label: "Center left", value: "center_left" },
+                  { label: "Center", value: "center_center" },
+                  { label: "Center right", value: "center_right" },
+                  { label: "Bottom left", value: "bottom_left" },
+                  { label: "Bottom center", value: "bottom_center" },
+                  { label: "Bottom right", value: "bottom_right" },
+                ]}
+                value={itemTagsDraft.textPosition || "bottom_left"}
+                onChange={(value) => updateItemTagsDraft({ textPosition: value })}
+              />
+            </BlockStack>
+          )}
+        </Modal.Section>
+      </Modal>
+
+      <Modal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
         title="Banner preview"
@@ -2286,7 +3508,7 @@ export default function BannerEdit() {
           <div className="bainners-preview-frame">
             <iframe
               title="Banner preview"
-              src={`/app/banners/${banner.id}/preview${editSearch}`}
+              srcDoc={previewHtml}
             />
           </div>
         </Modal.Section>
@@ -2300,7 +3522,8 @@ export default function BannerEdit() {
           content: "Save and close",
           onAction: () => {
             setCustomCssValue(customCssDraft);
-            saveBanner({ customCss: customCssDraft });
+            setAdvancedValues(advancedDraft);
+            saveBanner({ ...advancedDraft, customCss: customCssDraft });
             setAdvancedOpen(false);
           },
         }}
@@ -2312,19 +3535,202 @@ export default function BannerEdit() {
         ]}
       >
         <Modal.Section>
-          <BlockStack gap="200">
-            <Text as="p" variant="bodySm">
-              Additional CSS (optional)
-            </Text>
-            <TextField
-              label="Custom CSS"
-              labelHidden
-              multiline={8}
-              placeholder=".hero-banner { }"
-              value={customCssDraft}
-              onChange={setCustomCssDraft}
-              monospaced
-            />
+          <BlockStack gap="400">
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Banner styles
+              </Text>
+              {renderColorField(
+                "Background color",
+                advancedDraft.bannerBackgroundColor,
+                (value) => updateAdvancedDraft({ bannerBackgroundColor: value })
+              )}
+            </BlockStack>
+
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Typography
+              </Text>
+              <InlineStack gap="300" align="start">
+                <Select
+                  label="Title size"
+                  options={[
+                    { label: "Small", value: "sm" },
+                    { label: "Medium", value: "md" },
+                    { label: "Large", value: "lg" },
+                    { label: "Extra large", value: "xl" },
+                  ]}
+                  value={advancedDraft.titleFontSize}
+                  onChange={(value) => updateAdvancedDraft({ titleFontSize: value })}
+                />
+                {renderColorField("Title color", advancedDraft.titleColor, (value) =>
+                  updateAdvancedDraft({ titleColor: value })
+                )}
+              </InlineStack>
+              <InlineStack gap="300" align="start">
+                <Select
+                  label="Description size"
+                  options={[
+                    { label: "Small", value: "sm" },
+                    { label: "Medium", value: "md" },
+                    { label: "Large", value: "lg" },
+                    { label: "Extra large", value: "xl" },
+                  ]}
+                  value={advancedDraft.descriptionFontSize}
+                  onChange={(value) => updateAdvancedDraft({ descriptionFontSize: value })}
+                />
+                {renderColorField("Description color", advancedDraft.descriptionColor, (value) =>
+                  updateAdvancedDraft({ descriptionColor: value })
+                )}
+              </InlineStack>
+            </BlockStack>
+
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                CTA styles
+              </Text>
+              <InlineStack gap="300" align="start">
+                {renderColorField("CTA text color", advancedDraft.ctaTextColor, (value) =>
+                  updateAdvancedDraft({ ctaTextColor: value })
+                )}
+                {renderColorField("CTA background", advancedDraft.ctaBackgroundColor, (value) =>
+                  updateAdvancedDraft({ ctaBackgroundColor: value })
+                )}
+                {renderColorField("CTA border", advancedDraft.ctaBorderColor, (value) =>
+                  updateAdvancedDraft({ ctaBorderColor: value })
+                )}
+              </InlineStack>
+              <InlineStack gap="300" align="start">
+                <Checkbox
+                  label="Bordered"
+                  checked={advancedDraft.ctaBordered}
+                  onChange={(value) => updateAdvancedDraft({ ctaBordered: value })}
+                />
+                <Checkbox
+                  label="Rounded"
+                  checked={advancedDraft.ctaRounded}
+                  onChange={(value) => updateAdvancedDraft({ ctaRounded: value })}
+                />
+                <Checkbox
+                  label="Shadow"
+                  checked={advancedDraft.ctaShadow}
+                  onChange={(value) => updateAdvancedDraft({ ctaShadow: value })}
+                />
+              </InlineStack>
+            </BlockStack>
+
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Countdown styles
+              </Text>
+              <InlineStack gap="300" align="start">
+                <Select
+                  label="Countdown style"
+                  options={[
+                    { label: "Solid", value: "solid" },
+                    { label: "Outline", value: "outline" },
+                    { label: "Pill", value: "pill" },
+                  ]}
+                  value={advancedDraft.countdownStyle}
+                  onChange={(value) => updateAdvancedDraft({ countdownStyle: value })}
+                />
+                {renderColorField(
+                  "Countdown text color",
+                  advancedDraft.countdownTextColor,
+                  (value) => updateAdvancedDraft({ countdownTextColor: value })
+                )}
+                {renderColorField(
+                  "Countdown background",
+                  advancedDraft.countdownBackgroundColor,
+                  (value) => updateAdvancedDraft({ countdownBackgroundColor: value })
+                )}
+              </InlineStack>
+            </BlockStack>
+
+            {layoutValue === "slider" ? (
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingSm">
+                  Slider arrows & bullets
+                </Text>
+                <InlineStack gap="300" align="start" wrap={false}>
+                  {[
+                    { id: "chevron", label: "Chevron" },
+                    { id: "arrow", label: "Arrow" },
+                    { id: "minimal", label: "Minimal" },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`bainners-arrow-style${
+                        advancedDraft.sliderArrowStyle === option.id
+                          ? " bainners-arrow-style--selected"
+                          : ""
+                      }`}
+                      onClick={() => updateAdvancedDraft({ sliderArrowStyle: option.id })}
+                    >
+                      <span className={`bainners-arrow-preview bainners-arrow-preview--${option.id}`}>
+                        {option.id === "arrow" ? "← →" : option.id === "minimal" ? "‹ ›" : "❮ ❯"}
+                      </span>
+                      <span className="bainners-arrow-label">{option.label}</span>
+                    </button>
+                  ))}
+                </InlineStack>
+                <InlineStack gap="300" align="start">
+                  {renderColorField("Arrow color", advancedDraft.sliderArrowColor, (value) =>
+                    updateAdvancedDraft({ sliderArrowColor: value })
+                  )}
+                  {renderColorField("Bullet color", advancedDraft.sliderBulletColor, (value) =>
+                    updateAdvancedDraft({ sliderBulletColor: value })
+                  )}
+                </InlineStack>
+              </BlockStack>
+            ) : null}
+
+            {layoutValue === "announcement" ? (
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingSm">
+                  Announcement motion
+                </Text>
+                <InlineStack gap="300" align="start">
+                  <Checkbox
+                    label="Marquee"
+                    checked={advancedDraft.announcementMarquee}
+                    onChange={(value) => updateAdvancedDraft({ announcementMarquee: value })}
+                  />
+                  <Select
+                    label="Animation"
+                    options={[
+                      { label: "None", value: "none" },
+                      { label: "Shake", value: "shake" },
+                      { label: "Pulse", value: "pulse" },
+                      { label: "Bounce", value: "bounce" },
+                    ]}
+                    value={advancedDraft.announcementAnimation}
+                    onChange={(value) => updateAdvancedDraft({ announcementAnimation: value })}
+                  />
+                  {renderColorField(
+                    "Close icon color",
+                    advancedDraft.announcementCloseColor,
+                    (value) => updateAdvancedDraft({ announcementCloseColor: value })
+                  )}
+                </InlineStack>
+              </BlockStack>
+            ) : null}
+
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Additional CSS (optional)
+              </Text>
+              <TextField
+                label="Custom CSS"
+                labelHidden
+                multiline={8}
+                placeholder=".hero-banner { }"
+                value={customCssDraft}
+                onChange={setCustomCssDraft}
+                monospaced
+              />
+            </BlockStack>
           </BlockStack>
         </Modal.Section>
       </Modal>

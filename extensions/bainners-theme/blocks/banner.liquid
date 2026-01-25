@@ -58,13 +58,40 @@
         if (slider.__bainnersInit) return;
         slider.__bainnersInit = true;
         var effect = slider.getAttribute("data-effect") || "slide";
+        var showBullets = slider.getAttribute("data-bullets") !== "0";
+        var showArrows = slider.getAttribute("data-arrows") !== "0";
+        var autoplay = slider.getAttribute("data-autoplay") === "1";
+        var loop = slider.getAttribute("data-loop") !== "0";
+        var perView = parseFloat(slider.getAttribute("data-per-view") || "1");
+        var speedLabel = slider.getAttribute("data-speed") || "regular";
+        var speed =
+          speedLabel === "slow" ? 1200 : speedLabel === "fast" ? 300 : 600;
+        var delay = parseInt(slider.getAttribute("data-delay") || "3500", 10);
+        var centered = slider.getAttribute("data-centered") === "1";
+        var spaceBetween = parseInt(slider.getAttribute("data-space") || "16", 10);
+        var pauseOnHover = slider.getAttribute("data-hover") !== "0";
         new window.Swiper(slider, {
           effect: effect,
-          loop: true,
-          pagination: {
-            el: slider.querySelector(".swiper-pagination"),
-            clickable: true
-          }
+          loop: loop,
+          slidesPerView: perView,
+          spaceBetween: spaceBetween,
+          centeredSlides: centered,
+          speed: speed,
+          autoplay: autoplay
+            ? { delay: delay, disableOnInteraction: false, pauseOnMouseEnter: pauseOnHover }
+            : false,
+          pagination: showBullets
+            ? {
+                el: slider.querySelector(".swiper-pagination"),
+                clickable: true
+              }
+            : false,
+          navigation: showArrows
+            ? {
+                nextEl: slider.querySelector(".swiper-button-next"),
+                prevEl: slider.querySelector(".swiper-button-prev")
+              }
+            : false
         });
       });
     }

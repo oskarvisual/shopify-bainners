@@ -92,10 +92,9 @@ export function BannerCreateModal({
                 label="Layout Type"
                 name="layout"
                 options={[
+                  { label: "Announcement", value: "announcement" },
                   { label: "Hero Banner", value: "hero" },
                   { label: "Slider", value: "slider" },
-                  { label: "Promo Strip", value: "promo_strip" },
-                  { label: "Product Highlight", value: "product_highlight" },
                 ]}
                 value={layoutValue}
                 onChange={setLayoutValue}
