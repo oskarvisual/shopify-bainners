@@ -25,13 +25,13 @@ export function BannerCreateModal({
   const isFetcherSubmitting = fetcher.state !== "idle";
   const [titleValue, setTitleValue] = useState("");
   const [descriptionValue, setDescriptionValue] = useState("");
-  const [layoutValue, setLayoutValue] = useState("hero");
+  const [layoutValue, setLayoutValue] = useState("announcement");
 
   useEffect(() => {
     if (!open) {
       setTitleValue("");
       setDescriptionValue("");
-      setLayoutValue("hero");
+      setLayoutValue("announcement");
     }
   }, [open]);
 

@@ -16,17 +16,14 @@ export default function SetupGuide() {
               <List type="number">
                 <List.Item>Create and publish a banner in the app.</List.Item>
                 <List.Item>
-                  Copy the Banner ID from the edit screen (top right).
-                </List.Item>
-                <List.Item>
                   Open the Theme Editor and add the “Bainners Banner” block.
                 </List.Item>
                 <List.Item>
-                  Paste the Banner ID into the block setting and save the theme.
+                  Select a published banner from the dropdown and save the theme.
                 </List.Item>
               </List>
               <Text as="p" variant="bodySm">
-                The block will render the banner that matches the ID and belongs to this shop.
+                The block will render the banner you selected for this shop.
               </Text>
               <Button url={backToDashboard} variant="primary">
                 Back to dashboard

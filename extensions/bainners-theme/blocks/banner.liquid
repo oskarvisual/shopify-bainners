@@ -1,7 +1,13 @@
-<div class="bainners-banner-block" id="bainners-banner-{{ block.id }}" data-banner-id="{{ block.settings.banner_id | escape }}">
-  {% if block.settings.banner_id == blank %}
+{% assign banner_meta = block.settings.banner %}
+{% assign banner_id = '' %}
+{% if banner_meta != blank %}
+  {% assign banner_id = banner_meta.banner_id.value | default: banner_meta.banner_id %}
+{% endif %}
+
+<div class="bainners-banner-block" id="bainners-banner-{{ block.id }}" data-banner-id="{{ banner_id | escape }}">
+  {% if banner_id == blank %}
     <div class="bainners-banner-empty">
-      Add a Banner ID in the block settings to display a banner.
+      Select a published banner to display it here.
     </div>
   {% else %}
     <div class="bainners-banner-loading">Loading banner...</div>
@@ -120,10 +126,10 @@
   "target": "section",
   "settings": [
     {
-      "type": "text",
-      "id": "banner_id",
-      "label": "Banner ID",
-      "info": "Paste the Banner ID from the app."
+      "type": "metaobject",
+      "id": "banner",
+      "label": "Banner",
+      "metaobject_type": "bainners_banner"
     }
   ]
 }

@@ -44,6 +44,182 @@ import {
 } from "@shopify/polaris-icons";
 
 const APP_GALLERY_PAGE_SIZE = 12;
+const METAOBJECT_TYPE = "bainners_banner";
+
+async function ensureBannerMetaobjectDefinition(admin: any) {
+  try {
+    const existing = await admin.graphql(
+      `
+      query GetDefinition($type: String!) {
+        metaobjectDefinitionByType(type: $type) {
+          id
+        }
+      }
+      `,
+      { variables: { type: METAOBJECT_TYPE } }
+    );
+    const existingJson = await existing.json();
+    if (existingJson?.data?.metaobjectDefinitionByType?.id) {
+      return;
+    }
+  } catch (error) {
+    console.warn("Failed to check metaobject definition", error);
+  }
+
+  try {
+    const response = await admin.graphql(
+      `
+      mutation CreateDefinition($definition: MetaobjectDefinitionCreateInput!) {
+        metaobjectDefinitionCreate(definition: $definition) {
+          metaobjectDefinition {
+            id
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+      `,
+      {
+        variables: {
+          definition: {
+            name: "Bainners Banner",
+            type: METAOBJECT_TYPE,
+            fieldDefinitions: [
+              {
+                name: "Banner ID",
+                key: "banner_id",
+                type: "single_line_text_field",
+                required: true,
+              },
+              {
+                name: "Title",
+                key: "title",
+                type: "single_line_text_field",
+                required: true,
+              },
+              {
+                name: "Status",
+                key: "status",
+                type: "single_line_text_field",
+                required: false,
+              },
+            ],
+          },
+        },
+      }
+    );
+    const json = await response.json();
+    if (json?.data?.metaobjectDefinitionCreate?.userErrors?.length) {
+      console.warn("Metaobject definition errors", json.data.metaobjectDefinitionCreate.userErrors);
+    }
+  } catch (error) {
+    console.warn("Failed to create metaobject definition", error);
+  }
+}
+
+async function syncBannerMetaobject(admin: any, banner: any) {
+  if (!admin) return;
+  await ensureBannerMetaobjectDefinition(admin);
+  const query = `banner_id:${banner.id}`;
+  let existingId: string | null = null;
+  try {
+    const lookup = await admin.graphql(
+      `
+      query FindMetaobject($type: String!, $query: String!) {
+        metaobjects(first: 1, type: $type, query: $query) {
+          nodes {
+            id
+          }
+        }
+      }
+      `,
+      { variables: { type: METAOBJECT_TYPE, query } }
+    );
+    const json = await lookup.json();
+    existingId = json?.data?.metaobjects?.nodes?.[0]?.id || null;
+  } catch (error) {
+    console.warn("Failed to lookup metaobject", error);
+  }
+
+  if (banner.status !== "active") {
+    if (existingId) {
+      try {
+        await admin.graphql(
+          `
+          mutation DeleteMetaobject($id: ID!) {
+            metaobjectDelete(id: $id) {
+              deletedId
+              userErrors {
+                message
+              }
+            }
+          }
+          `,
+          { variables: { id: existingId } }
+        );
+      } catch (error) {
+        console.warn("Failed to delete metaobject", error);
+      }
+    }
+    return;
+  }
+
+  const fields = [
+    { key: "banner_id", value: banner.id },
+    { key: "title", value: banner.title },
+    { key: "status", value: banner.status },
+  ];
+
+  try {
+    if (existingId) {
+      await admin.graphql(
+        `
+        mutation UpdateMetaobject($id: ID!, $metaobject: MetaobjectUpdateInput!) {
+          metaobjectUpdate(id: $id, metaobject: $metaobject) {
+            metaobject {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        `,
+        { variables: { id: existingId, metaobject: { fields } } }
+      );
+    } else {
+      await admin.graphql(
+        `
+        mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
+          metaobjectCreate(metaobject: $metaobject) {
+            metaobject {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        `,
+        {
+          variables: {
+            metaobject: {
+              type: METAOBJECT_TYPE,
+              handle: `banner-${banner.id}`,
+              fields,
+            },
+          },
+        }
+      );
+    }
+  } catch (error) {
+    console.warn("Failed to upsert metaobject", error);
+  }
+}
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { admin, session } = await authenticate.admin(request);
@@ -87,6 +263,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   if (!banner) {
     throw new Error("Banner not found");
+  }
+
+  await ensureBannerMetaobjectDefinition(admin);
+  if (banner.status === "active") {
+    await syncBannerMetaobject(admin, banner);
   }
 
   const analytics = await db.bannerAnalytic.aggregate({
@@ -323,7 +504,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const shopParam = url.searchParams.get("shop") || undefined;
   const shop = session?.shop || shopParam;
@@ -355,12 +536,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ success: false, error: "Banner not found" }, { status: 404 });
   }
 
-    if (action === "update-banner") {
-      const nextStatus = (formData.get("status") as string) || banner.status;
-      await db.banner.update({
-        where: { id: banner.id },
-        data: {
-          title: (formData.get("title") as string) || banner.title,
+  if (action === "update-banner") {
+    const nextStatus = (formData.get("status") as string) || banner.status;
+    const updatedBanner = await db.banner.update({
+      where: { id: banner.id },
+      data: {
+        title: (formData.get("title") as string) || banner.title,
         descriptionInternal: (formData.get("descriptionInternal") as string) || null,
         layout: (formData.get("layout") as string) || banner.layout,
         sliderType: (formData.get("sliderType") as string) || banner.sliderType,
@@ -489,6 +670,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           : banner.customCss,
       },
     });
+
+    await syncBannerMetaobject(admin, updatedBanner);
 
     return json({ success: true });
   }
@@ -1107,6 +1290,7 @@ function parseVideoUrl(url: string): { provider: "youtube" | "vimeo"; id: string
 
 export default function BannerEdit() {
   const {
+    shop,
     plan,
     storageUsedMB,
     storageLimitGB,
@@ -1121,6 +1305,9 @@ export default function BannerEdit() {
   } = useLoaderData<typeof loader>();
   const location = useLocation();
   const editSearch = location.search || "";
+  const themeEditorUrl = shop
+    ? `https://${shop}/admin/themes/current/editor?template=index`
+    : "";
 
   const updateFetcher = useFetcher();
   const itemUpdateFetcher = useFetcher();
@@ -1286,7 +1473,6 @@ export default function BannerEdit() {
   const [itemEditorTab, setItemEditorTab] = useState(0);
   const [itemTagsDraft, setItemTagsDraft] = useState<Record<string, any>>({});
   const [contentDragIndex, setContentDragIndex] = useState<number | null>(null);
-  const [copiedBannerId, setCopiedBannerId] = useState(false);
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
 
   const storageUsageLabel = useMemo(() => {
@@ -3162,31 +3348,19 @@ export default function BannerEdit() {
                 Option 1
               </Text>
               <Text as="p" variant="bodySm">
-                Use the Banner ID inside the Theme Editor block.
+                Add the Bainners Banner block in the Theme Editor and select a published banner.
               </Text>
               <InlineStack gap="200" blockAlign="center" wrap={false}>
-                <Text as="span" variant="headingSm">
-                  ID: {banner.id}
-                </Text>
                 <Button
-                  icon={ClipboardIcon}
-                  variant="tertiary"
-                  accessibilityLabel="Copy banner ID"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(banner.id);
-                      setCopiedBannerId(true);
-                      setTimeout(() => setCopiedBannerId(false), 2000);
-                    } catch {
-                      setCopiedBannerId(false);
-                    }
+                  variant="primary"
+                  disabled={!themeEditorUrl}
+                  onClick={() => {
+                    if (!themeEditorUrl) return;
+                    window.open(themeEditorUrl, "_blank", "noopener,noreferrer");
                   }}
-                />
-                {copiedBannerId ? (
-                  <Text as="span" variant="bodySm" tone="success">
-                    Copied
-                  </Text>
-                ) : null}
+                >
+                  Open Theme Editor
+                </Button>
                 <Button
                   icon={QuestionCircleIcon}
                   variant="tertiary"
@@ -3196,7 +3370,7 @@ export default function BannerEdit() {
               </InlineStack>
               <div className="bainners-embed-media">
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Add the “Bainners Banner” block in the Theme Editor and paste the ID.
+                  Add the block, then pick a published banner from the dropdown.
                 </Text>
               </div>
             </BlockStack>

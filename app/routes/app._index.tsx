@@ -16,6 +16,159 @@ import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { BannerCreateModal } from "../components/BannerCreateModal";
 
+const METAOBJECT_TYPE = "bainners_banner";
+
+async function ensureBannerMetaobjectDefinition(admin: any) {
+  try {
+    const existing = await admin.graphql(
+      `
+      query GetDefinition($type: String!) {
+        metaobjectDefinitionByType(type: $type) {
+          id
+        }
+      }
+      `,
+      { variables: { type: METAOBJECT_TYPE } }
+    );
+    const existingJson = await existing.json();
+    if (existingJson?.data?.metaobjectDefinitionByType?.id) {
+      return;
+    }
+  } catch (error) {
+    console.warn("Failed to check metaobject definition", error);
+  }
+
+  try {
+    const response = await admin.graphql(
+      `
+      mutation CreateDefinition($definition: MetaobjectDefinitionCreateInput!) {
+        metaobjectDefinitionCreate(definition: $definition) {
+          metaobjectDefinition {
+            id
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+      `,
+      {
+        variables: {
+          definition: {
+            name: "Bainners Banner",
+            type: METAOBJECT_TYPE,
+            fieldDefinitions: [
+              {
+                name: "Banner ID",
+                key: "banner_id",
+                type: "single_line_text_field",
+                required: true,
+              },
+              {
+                name: "Title",
+                key: "title",
+                type: "single_line_text_field",
+                required: true,
+              },
+              {
+                name: "Status",
+                key: "status",
+                type: "single_line_text_field",
+                required: false,
+              },
+            ],
+          },
+        },
+      }
+    );
+    const json = await response.json();
+    if (json?.data?.metaobjectDefinitionCreate?.userErrors?.length) {
+      console.warn("Metaobject definition errors", json.data.metaobjectDefinitionCreate.userErrors);
+    }
+  } catch (error) {
+    console.warn("Failed to create metaobject definition", error);
+  }
+}
+
+async function syncBannerMetaobject(admin: any, banner: { id: string; title: string; status: string }) {
+  if (!admin) return;
+  const query = `banner_id:${banner.id}`;
+  let existingId: string | null = null;
+  try {
+    const lookup = await admin.graphql(
+      `
+      query FindMetaobject($type: String!, $query: String!) {
+        metaobjects(first: 1, type: $type, query: $query) {
+          nodes {
+            id
+          }
+        }
+      }
+      `,
+      { variables: { type: METAOBJECT_TYPE, query } }
+    );
+    const json = await lookup.json();
+    existingId = json?.data?.metaobjects?.nodes?.[0]?.id || null;
+  } catch (error) {
+    console.warn("Failed to lookup metaobject", error);
+  }
+
+  const fields = [
+    { key: "banner_id", value: banner.id },
+    { key: "title", value: banner.title },
+    { key: "status", value: banner.status },
+  ];
+
+  try {
+    if (existingId) {
+      await admin.graphql(
+        `
+        mutation UpdateMetaobject($id: ID!, $metaobject: MetaobjectUpdateInput!) {
+          metaobjectUpdate(id: $id, metaobject: $metaobject) {
+            metaobject {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        `,
+        { variables: { id: existingId, metaobject: { fields } } }
+      );
+    } else {
+      await admin.graphql(
+        `
+        mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
+          metaobjectCreate(metaobject: $metaobject) {
+            metaobject {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        `,
+        {
+          variables: {
+            metaobject: {
+              type: METAOBJECT_TYPE,
+              handle: `banner-${banner.id}`,
+              fields,
+            },
+          },
+        }
+      );
+    }
+  } catch (error) {
+    console.warn("Failed to upsert metaobject", error);
+  }
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.clone().formData();
   const { session } = await authenticate.admin(request);
@@ -59,7 +212,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const shopParam = url.searchParams.get("shop") || undefined;
   const shop = session?.shop || shopParam;
@@ -72,6 +225,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
+  await ensureBannerMetaobjectDefinition(admin);
+
   const shopRecord = await db.shop.findUnique({
     where: { shopDomain: shop },
     include: {
@@ -83,6 +238,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       images: true,
     },
   });
+
+  if (shopRecord) {
+    const activeBanners = await db.banner.findMany({
+      where: { shopId: shopRecord.id, status: "active" },
+      select: { id: true, title: true, status: true },
+    });
+    await Promise.all(activeBanners.map((banner) => syncBannerMetaobject(admin, banner)));
+  }
 
   const totalBanners = shopRecord?.banners.length || 0;
   const totalImages = shopRecord?.images.length || 0;

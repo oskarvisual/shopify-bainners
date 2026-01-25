@@ -9,7 +9,7 @@ import {
 } from "@remix-run/react";
 import { Page, Layout, Card, EmptyState, Button, Badge, Icon, Select, InlineStack } from "@shopify/polaris";
 import { useState } from "react";
-import { PlusIcon, ImageIcon } from "@shopify/polaris-icons";
+import { PlusIcon, ImageIcon, MegaphoneIcon, PlayCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { getPlanStorageLimitGB } from "../utils/storage.server";
@@ -76,20 +76,38 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   let banners = shopRecord.banners.map((banner) => {
-    const selectedItem = banner.bannerItems.find((item) => item.isSelected);
+    const firstItem = banner.bannerItems[0];
+    const itemTags = (firstItem?.tags as Record<string, any> | null) || {};
+    let thumbnailUrl = "";
+
+    if (firstItem) {
+      if (itemTags.mediaType === "video") {
+        const provider = itemTags.videoProvider;
+        const videoId = itemTags.videoId;
+        if (provider === "youtube" && videoId) {
+          thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        } else if (provider === "vimeo" && videoId) {
+          thumbnailUrl = `https://vumbnail.com/${videoId}.jpg`;
+        }
+      } else {
+        thumbnailUrl = firstItem.image?.storageUrl || firstItem.externalImageUrl || "";
+      }
+    }
+
     return {
       id: banner.id,
       title: banner.title,
       status: banner.status,
       layout: banner.layout,
       imageCount: banner.bannerItems.length,
-      image: selectedItem
+      image: thumbnailUrl
         ? {
-            url: selectedItem.image?.storageUrl || selectedItem.externalImageUrl || "",
-            width: selectedItem.image?.width || 1920,
-            height: selectedItem.image?.height || 1080,
+            url: thumbnailUrl,
+            width: firstItem?.image?.width || 1920,
+            height: firstItem?.image?.height || 1080,
           }
         : null,
+      hasVideo: itemTags.mediaType === "video",
       createdAt: banner.createdAt.toISOString(),
       updatedAt: banner.updatedAt.toISOString(),
     };
@@ -281,7 +299,16 @@ export default function BannersIndex() {
                                 justifyContent: "center",
                               }}
                             >
-                              <Icon source={ImageIcon} tone="base" />
+                              <Icon
+                                source={
+                                  banner.layout === "announcement"
+                                    ? MegaphoneIcon
+                                    : banner.hasVideo
+                                    ? PlayCircleIcon
+                                    : ImageIcon
+                                }
+                                tone="base"
+                              />
                             </div>
                           )}
                         </td>
