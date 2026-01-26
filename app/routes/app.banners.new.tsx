@@ -4,6 +4,7 @@ import { BannerCreateModal } from "../components/BannerCreateModal";
 import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { getPlanStorageLimitGB } from "../utils/storage.server";
+import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   await authenticate.admin(request);
@@ -37,18 +38,20 @@ export async function action({ request }: ActionFunctionArgs) {
         shopDomain: shop,
         plan: "free",
         storageLimitGB: getPlanStorageLimitGB("free"),
+        ...DEFAULT_SHOP_DEFAULTS,
       },
     });
   }
 
   try {
+    const requestedLayout = (formData.get("layout") as string) || "hero";
     const banner = await db.banner.create({
       data: {
         shopId: shopRecord.id,
         title: (formData.get("title") as string) || "Untitled banner",
         descriptionInternal: (formData.get("description") as string) || null,
         status: "draft",
-        layout: (formData.get("layout") as string) || "hero",
+        layout: requestedLayout,
         displayOrder: await getNextDisplayOrder(shopRecord.id),
         bannerBackgroundColor: shopRecord.defaultBannerBackgroundColor,
         titleFontSize: shopRecord.defaultTitleFontSize || "lg",
@@ -61,9 +64,13 @@ export async function action({ request }: ActionFunctionArgs) {
         ctaBordered: shopRecord.defaultCtaBordered ?? false,
         ctaRounded: shopRecord.defaultCtaRounded ?? true,
         ctaShadow: shopRecord.defaultCtaShadow ?? false,
+        ctaStyle: shopRecord.defaultCtaStyle || "button",
+        ctaUnderline: shopRecord.defaultCtaUnderline ?? false,
         countdownTextColor: shopRecord.defaultCountdownTextColor,
         countdownBackgroundColor: shopRecord.defaultCountdownBackgroundColor,
         countdownStyle: shopRecord.defaultCountdownStyle || "solid",
+        countdownFontSize: shopRecord.defaultCountdownFontSize || "md",
+        announcementCountdownTimezone: shopRecord.defaultCountdownTimezone || "UTC",
         sliderArrowStyle: shopRecord.defaultSliderArrowStyle || "chevron",
         sliderArrowColor: shopRecord.defaultSliderArrowColor,
         sliderBulletColor: shopRecord.defaultSliderBulletColor,
@@ -71,6 +78,15 @@ export async function action({ request }: ActionFunctionArgs) {
         announcementAnimation: shopRecord.defaultAnnouncementAnimation || "none",
         announcementCloseColor: shopRecord.defaultAnnouncementCloseColor,
         announcementClosable: shopRecord.defaultAnnouncementClosable ?? false,
+        announcementLayout: shopRecord.defaultAnnouncementLayout || "inline",
+        announcementContentSpacing: shopRecord.defaultAnnouncementContentSpacing ?? 12,
+        announcementShowText: shopRecord.defaultAnnouncementShowText ?? true,
+        announcementShowCta: shopRecord.defaultAnnouncementShowCta ?? true,
+        announcementShowCoupon: shopRecord.defaultAnnouncementShowCoupon ?? false,
+        announcementCouponTextColor: shopRecord.defaultAnnouncementCouponTextColor,
+        announcementCouponBorderColor: shopRecord.defaultAnnouncementCouponBorderColor,
+        announcementCouponBackgroundColor: shopRecord.defaultAnnouncementCouponBackgroundColor,
+        announcementContentOrder: ["text", "coupon", "cta", "countdown"],
         announcementCtaTarget: "_self",
       },
     });

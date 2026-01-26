@@ -7,6 +7,8 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import appStyles from "../styles/app.css?url";
 
 import { authenticate } from "../shopify.server";
+import { PlanProvider } from "../lib/plan-context";
+import { getSubscriptionPlanContext } from "../lib/plans.server";
 
 export const links = () => [
   { rel: "stylesheet", href: polarisStyles },
@@ -14,26 +16,33 @@ export const links = () => [
 ];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const { shop, subscriptionPlan } = session;
+  const planContext = await getSubscriptionPlanContext({
+    shop,
+    sessionPlan: subscriptionPlan,
+  });
 
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", planContext };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, planContext } = useLoaderData<typeof loader>();
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
-      <NavMenu>
-        <Link to="/app" rel="home">
-          Home
-        </Link>
-        <Link to="/app/banners">Banners</Link>
-        <Link to="/app/images">Image Gallery</Link>
-        <Link to="/app/analytics">Analytics</Link>
-        <Link to="/app/settings">Settings</Link>
-      </NavMenu>
-      <Outlet />
+      <PlanProvider value={planContext}>
+        <NavMenu>
+          <Link to="/app" rel="home">
+            Home
+          </Link>
+          <Link to="/app/banners">Banners</Link>
+          <Link to="/app/images">Image Gallery</Link>
+          <Link to="/app/analytics">Analytics</Link>
+          <Link to="/app/settings">Settings</Link>
+        </NavMenu>
+        <Outlet />
+      </PlanProvider>
     </AppProvider>
   );
 }

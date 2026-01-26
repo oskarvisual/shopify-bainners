@@ -1,8 +1,10 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSearchParams } from "@remix-run/react";
-import { Badge, BlockStack, Card, InlineStack, Layout, Page, Select, Text } from "@shopify/polaris";
+import { Badge, Banner, BlockStack, Card, InlineStack, Layout, Page, Select, Text } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
+import { getSubscriptionPlanContext } from "../lib/plans.server";
+import { getPlanLimits, planHasFeature, PlanFeature } from "../lib/plans";
 
 function startOfDay(date: Date) {
   const d = new Date(date);
@@ -16,18 +18,41 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const shopParam = url.searchParams.get("shop") || undefined;
   const shop = session?.shop || shopParam;
   const rangeParam = url.searchParams.get("range") || "30";
-  const rangeDays = Math.max(7, Math.min(90, Number(rangeParam) || 30));
+  let rangeDays = Math.max(7, Math.min(90, Number(rangeParam) || 30));
 
   if (!shop) {
-    return json({ rangeDays, totals: { views: 0, clicks: 0, ctr: 0 }, chart: [], banners: [], items: [] });
+    return json({
+      rangeDays,
+      totals: { views: 0, clicks: 0, ctr: 0 },
+      chart: [],
+      banners: [],
+      items: [],
+      plan: "free",
+    });
   }
 
   const shopRecord = await db.shop.findUnique({
     where: { shopDomain: shop },
   });
   if (!shopRecord) {
-    return json({ rangeDays, totals: { views: 0, clicks: 0, ctr: 0 }, chart: [], banners: [], items: [] });
+    return json({
+      rangeDays,
+      totals: { views: 0, clicks: 0, ctr: 0 },
+      chart: [],
+      banners: [],
+      items: [],
+      plan: "free",
+    });
   }
+
+  const planContext = await getSubscriptionPlanContext({
+    shop,
+    sessionPlan: session?.subscriptionPlan,
+  });
+  const limits = getPlanLimits(planContext.plan);
+  rangeDays = Math.max(7, Math.min(limits.analyticsRange, rangeDays));
+  const showAdvanced = planHasFeature(planContext.plan, PlanFeature.ADVANCED_ANALYTICS);
+  const showCtr = planHasFeature(planContext.plan, PlanFeature.ANALYTICS_CTR);
 
   const today = startOfDay(new Date());
   const startDate = new Date(today);
@@ -122,21 +147,36 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   return json({
     rangeDays,
+    plan: planContext.plan,
     totals: {
       views: totals.views,
       clicks: totals.clicks,
-      ctr: totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0,
+      ctr: showCtr ? (totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0) : 0,
     },
-    chart: chartData,
-    banners: bannerRows,
-    items: itemRows,
+    chart: showAdvanced ? chartData : [],
+    banners: showAdvanced ? bannerRows : [],
+    items: showAdvanced ? itemRows : [],
   });
 }
 
 export default function AnalyticsPage() {
-  const { rangeDays, totals, chart, banners, items } = useLoaderData<typeof loader>();
+  const { rangeDays, totals, chart, banners, items, plan } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const maxViews = chart.reduce((max, row) => Math.max(max, row.views), 1);
+  const rangeOptions =
+    plan === "ultra"
+      ? [
+          { label: "Last 7 days", value: "7" },
+          { label: "Last 30 days", value: "30" },
+          { label: "Last 90 days", value: "90" },
+        ]
+      : plan === "pro"
+      ? [
+          { label: "Last 7 days", value: "7" },
+          { label: "Last 30 days", value: "30" },
+        ]
+      : [{ label: "Last 7 days", value: "7" }];
+  const showAdvanced = plan !== "free";
 
   return (
     <Page title="Analytics">
@@ -151,11 +191,7 @@ export default function AnalyticsPage() {
                 <Select
                   label="Date range"
                   labelHidden
-                  options={[
-                    { label: "Last 7 days", value: "7" },
-                    { label: "Last 30 days", value: "30" },
-                    { label: "Last 90 days", value: "90" },
-                  ]}
+                  options={rangeOptions}
                   value={String(rangeDays)}
                   onChange={(value) => {
                     searchParams.set("range", value);
@@ -184,35 +220,46 @@ export default function AnalyticsPage() {
                     </Text>
                   </BlockStack>
                 </Card>
-                <Card background="bg-surface-secondary">
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      CTR
-                    </Text>
-                    <Text as="p" variant="headingMd">
-                      {totals.ctr.toFixed(2)}%
-                    </Text>
-                  </BlockStack>
-                </Card>
+                {showAdvanced ? (
+                  <Card background="bg-surface-secondary">
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        CTR
+                      </Text>
+                      <Text as="p" variant="headingMd">
+                        {totals.ctr.toFixed(2)}%
+                      </Text>
+                    </BlockStack>
+                  </Card>
+                ) : null}
               </InlineStack>
-              <div className="bainners-analytics-chart">
-                {chart.map((row) => (
-                  <div key={row.date} className="bainners-analytics-bar">
-                    <div
-                      className="bainners-analytics-bar-fill"
-                      style={{
-                        height: `${Math.round((row.views / maxViews) * 100)}%`,
-                      }}
-                    />
-                    <span>{row.date.slice(5)}</span>
-                  </div>
-                ))}
-              </div>
+              {showAdvanced ? (
+                <div className="bainners-analytics-chart">
+                  {chart.map((row) => (
+                    <div key={row.date} className="bainners-analytics-bar">
+                      <div
+                        className="bainners-analytics-bar-fill"
+                        style={{
+                          height: `${Math.round((row.views / maxViews) * 100)}%`,
+                        }}
+                      />
+                      <span>{row.date.slice(5)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Banner tone="warning" title="Upgrade required">
+                  <Text as="p">
+                    Upgrade to unlock charts, CTR, and per-banner analytics.
+                  </Text>
+                </Banner>
+              )}
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        <Layout.Section>
+        {showAdvanced ? (
+          <Layout.Section>
           <Card>
             <BlockStack gap="300">
               <Text variant="headingMd" as="h2">
@@ -250,9 +297,11 @@ export default function AnalyticsPage() {
               </div>
             </BlockStack>
           </Card>
-        </Layout.Section>
+          </Layout.Section>
+        ) : null}
 
-        <Layout.Section>
+        {showAdvanced ? (
+          <Layout.Section>
           <Card>
             <BlockStack gap="300">
               <Text variant="headingMd" as="h2">
@@ -284,7 +333,8 @@ export default function AnalyticsPage() {
               </div>
             </BlockStack>
           </Card>
-        </Layout.Section>
+          </Layout.Section>
+        ) : null}
       </Layout>
     </Page>
   );

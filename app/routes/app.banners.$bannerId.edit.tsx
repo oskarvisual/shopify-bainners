@@ -27,7 +27,10 @@ import shopify, { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { dispatchImageAutomation, dispatchImageStatus } from "../utils/automation.server";
 import { getPlanStorageLimitGB, getStorageUsageMB } from "../utils/storage.server";
+import { zonedTimeToUtc } from "../utils/timezone.server";
 import { InlineEditableText } from "../components/InlineEditableText";
+import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
+import { getPlanLimits, planHasFeature, PlanFeature } from "../lib/plans";
 import {
   ArrowLeftIcon,
   DeleteIcon,
@@ -256,6 +259,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         shopDomain: shop,
         plan: "free",
         storageLimitGB: getPlanStorageLimitGB("free"),
+        ...DEFAULT_SHOP_DEFAULTS,
       },
     });
   }
@@ -296,12 +300,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     appImages.length === APP_GALLERY_PAGE_SIZE ? appImages[appImages.length - 1].id : null;
 
   const storageUsedMB = await getStorageUsageMB(shopRecord.id);
+  const defaultCountdownTimezone = shopRecord.defaultCountdownTimezone || "UTC";
+  const planLimits = getPlanLimits(shopRecord.plan);
 
   return json({
     shop: shopRecord.shopDomain,
     plan: shopRecord.plan,
     storageUsedMB,
     storageLimitGB: shopRecord.storageLimitGB,
+    defaultCountdownTimezone,
     banner: {
       id: banner.id,
       title: banner.title,
@@ -326,16 +333,32 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       announcementCtaUrl: banner.announcementCtaUrl || "",
       announcementCtaTarget: banner.announcementCtaTarget || "_self",
       announcementClosable: banner.announcementClosable ?? false,
+      announcementShowText: banner.announcementShowText ?? true,
+      announcementShowCta: banner.announcementShowCta ?? true,
+      announcementShowCoupon: banner.announcementShowCoupon ?? false,
+      announcementCouponCode: banner.announcementCouponCode || "",
+      announcementCouponTextColor: banner.announcementCouponTextColor || "",
+      announcementCouponBorderColor: banner.announcementCouponBorderColor || "",
+      announcementCouponBackgroundColor: banner.announcementCouponBackgroundColor || "",
+      announcementContentOrder: Array.isArray(banner.announcementContentOrder)
+        ? banner.announcementContentOrder
+        : ["text", "coupon", "cta", "countdown"],
+      announcementLayout: banner.announcementLayout || "inline",
+      announcementContentSpacing: banner.announcementContentSpacing ?? 12,
       announcementCloseColor: banner.announcementCloseColor || "",
       announcementMarquee: banner.announcementMarquee ?? false,
       announcementAnimation: banner.announcementAnimation || "none",
+      announcementSeparatorEnabled: banner.announcementSeparatorEnabled ?? false,
+      announcementSeparatorText: banner.announcementSeparatorText || "|",
       announcementShowCountdown: banner.announcementShowCountdown,
       announcementCountdownMode: banner.announcementCountdownMode || "fixed",
       announcementCountdownEndAt: banner.announcementCountdownEndAt
         ? banner.announcementCountdownEndAt.toISOString().slice(0, 16)
         : "",
-      announcementCountdownTimezone: banner.announcementCountdownTimezone || "UTC",
+      announcementCountdownTimezone:
+        banner.announcementCountdownTimezone || defaultCountdownTimezone || "UTC",
       announcementCountdownDurationHours: banner.announcementCountdownDurationHours || "1",
+      announcementCountdownShowLabels: banner.announcementCountdownShowLabels ?? false,
       bannerBackgroundColor: banner.bannerBackgroundColor || "",
       titleFontSize: banner.titleFontSize || "lg",
       descriptionFontSize: banner.descriptionFontSize || "md",
@@ -347,9 +370,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       ctaBordered: banner.ctaBordered ?? false,
       ctaRounded: banner.ctaRounded ?? true,
       ctaShadow: banner.ctaShadow ?? false,
+      ctaStyle: banner.ctaStyle || "button",
+      ctaUnderline: banner.ctaUnderline ?? false,
       countdownTextColor: banner.countdownTextColor || "",
       countdownBackgroundColor: banner.countdownBackgroundColor || "",
       countdownStyle: banner.countdownStyle || "solid",
+      countdownFontSize: banner.countdownFontSize || "md",
       status: banner.status,
       customCss: banner.customCss || "",
       scheduledStartAt: banner.scheduledStartAt
@@ -370,6 +396,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       sizeInMB: item.image?.sizeInMB || 0,
       isSelected: item.isSelected,
       tags: item.tags || {},
+      scheduledStartAt: item.scheduledStartAt
+        ? item.scheduledStartAt.toISOString().slice(0, 16)
+        : "",
+      scheduledEndAt: item.scheduledEndAt
+        ? item.scheduledEndAt.toISOString().slice(0, 16)
+        : "",
       createdAt: item.createdAt.toISOString(),
     })),
     analytics: {
@@ -425,6 +457,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (!shopRecord) {
     return json({ success: false, error: "Shop not found" }, { status: 404 });
   }
+  const planLimits = getPlanLimits(shopRecord.plan);
+  const defaultCountdownTimezone = shopRecord.defaultCountdownTimezone || "UTC";
 
   if (action === "load-shopify-products") {
     let shopifyProducts: Array<{
@@ -560,6 +594,41 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (action === "update-banner") {
     const nextStatus = (formData.get("status") as string) || banner.status;
+    const announcementContentOrder = formData.has("announcementContentOrder")
+      ? (() => {
+          try {
+            const parsed = JSON.parse(formData.get("announcementContentOrder") as string);
+            return Array.isArray(parsed) ? parsed : null;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+    const toZonedDate = (value: FormDataEntryValue | null) => {
+      if (!value) return null;
+      const raw = String(value).trim();
+      if (!raw) return null;
+      return zonedTimeToUtc(raw, defaultCountdownTimezone);
+    };
+    if (nextStatus === "active") {
+      const activeCount = await db.banner.count({
+        where: {
+          shopId: shopRecord.id,
+          status: "active",
+          id: { not: banner.id },
+        },
+      });
+      if (Number.isFinite(planLimits.activeBanners) && activeCount >= planLimits.activeBanners) {
+        return json(
+          {
+            success: false,
+            error: `Your plan allows up to ${planLimits.activeBanners} active banners.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const updatedBanner = await db.banner.update({
       where: { id: banner.id },
       data: {
@@ -622,6 +691,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
         announcementClosable: formData.has("announcementClosable")
           ? formData.get("announcementClosable") === "true"
           : banner.announcementClosable,
+        announcementShowText: formData.has("announcementShowText")
+          ? formData.get("announcementShowText") === "true"
+          : banner.announcementShowText,
+        announcementShowCta: formData.has("announcementShowCta")
+          ? formData.get("announcementShowCta") === "true"
+          : banner.announcementShowCta,
+        announcementShowCoupon: formData.has("announcementShowCoupon")
+          ? formData.get("announcementShowCoupon") === "true"
+          : banner.announcementShowCoupon,
+        announcementCouponCode: formData.has("announcementCouponCode")
+          ? ((formData.get("announcementCouponCode") as string) || null)
+          : banner.announcementCouponCode,
+        announcementContentOrder: formData.has("announcementContentOrder")
+          ? announcementContentOrder
+          : banner.announcementContentOrder,
+        announcementLayout: formData.has("announcementLayout")
+          ? ((formData.get("announcementLayout") as string) || null)
+          : banner.announcementLayout,
+        announcementContentSpacing: formData.has("announcementContentSpacing")
+          ? Number(formData.get("announcementContentSpacing") || 12)
+          : banner.announcementContentSpacing,
         announcementCloseColor: formData.has("announcementCloseColor")
           ? ((formData.get("announcementCloseColor") as string) || null)
           : banner.announcementCloseColor,
@@ -631,6 +721,21 @@ export async function action({ request, params }: ActionFunctionArgs) {
         announcementAnimation: formData.has("announcementAnimation")
           ? ((formData.get("announcementAnimation") as string) || null)
           : banner.announcementAnimation,
+        announcementSeparatorEnabled: formData.has("announcementSeparatorEnabled")
+          ? formData.get("announcementSeparatorEnabled") === "true"
+          : banner.announcementSeparatorEnabled,
+        announcementSeparatorText: formData.has("announcementSeparatorText")
+          ? ((formData.get("announcementSeparatorText") as string) || null)
+          : banner.announcementSeparatorText,
+        announcementCouponTextColor: formData.has("announcementCouponTextColor")
+          ? ((formData.get("announcementCouponTextColor") as string) || null)
+          : banner.announcementCouponTextColor,
+        announcementCouponBorderColor: formData.has("announcementCouponBorderColor")
+          ? ((formData.get("announcementCouponBorderColor") as string) || null)
+          : banner.announcementCouponBorderColor,
+        announcementCouponBackgroundColor: formData.has("announcementCouponBackgroundColor")
+          ? ((formData.get("announcementCouponBackgroundColor") as string) || null)
+          : banner.announcementCouponBackgroundColor,
         announcementShowCountdown: formData.has("announcementShowCountdown")
           ? formData.get("announcementShowCountdown") === "true"
           : banner.announcementShowCountdown,
@@ -638,9 +743,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           ? ((formData.get("announcementCountdownMode") as string) || null)
           : banner.announcementCountdownMode,
         announcementCountdownEndAt: formData.has("announcementCountdownEndAt")
-          ? ((formData.get("announcementCountdownEndAt") as string) || null)
-            ? new Date(formData.get("announcementCountdownEndAt") as string)
-            : null
+          ? toZonedDate(formData.get("announcementCountdownEndAt"))
           : banner.announcementCountdownEndAt,
         announcementCountdownTimezone: formData.has("announcementCountdownTimezone")
           ? ((formData.get("announcementCountdownTimezone") as string) || null)
@@ -648,6 +751,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
         announcementCountdownDurationHours: formData.has("announcementCountdownDurationHours")
           ? ((formData.get("announcementCountdownDurationHours") as string) || null)
           : banner.announcementCountdownDurationHours,
+        announcementCountdownShowLabels: formData.has("announcementCountdownShowLabels")
+          ? formData.get("announcementCountdownShowLabels") === "true"
+          : banner.announcementCountdownShowLabels,
         bannerBackgroundColor: formData.has("bannerBackgroundColor")
           ? ((formData.get("bannerBackgroundColor") as string) || null)
           : banner.bannerBackgroundColor,
@@ -681,6 +787,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
         ctaShadow: formData.has("ctaShadow")
           ? formData.get("ctaShadow") === "true"
           : banner.ctaShadow,
+        ctaStyle: formData.has("ctaStyle")
+          ? ((formData.get("ctaStyle") as string) || null)
+          : banner.ctaStyle,
+        ctaUnderline: formData.has("ctaUnderline")
+          ? formData.get("ctaUnderline") === "true"
+          : banner.ctaUnderline,
         countdownTextColor: formData.has("countdownTextColor")
           ? ((formData.get("countdownTextColor") as string) || null)
           : banner.countdownTextColor,
@@ -690,9 +802,24 @@ export async function action({ request, params }: ActionFunctionArgs) {
         countdownStyle: formData.has("countdownStyle")
           ? ((formData.get("countdownStyle") as string) || null)
           : banner.countdownStyle,
+        countdownFontSize: formData.has("countdownFontSize")
+          ? ((formData.get("countdownFontSize") as string) || null)
+          : banner.countdownFontSize,
         customCss: formData.has("customCss")
-          ? ((formData.get("customCss") as string) || null)
+          ? shopRecord.plan === "free"
+            ? null
+            : ((formData.get("customCss") as string) || null)
           : banner.customCss,
+        scheduledStartAt: formData.has("scheduledStartAt")
+          ? planHasFeature(shopRecord.plan, PlanFeature.SCHEDULING)
+            ? toZonedDate(formData.get("scheduledStartAt"))
+            : null
+          : banner.scheduledStartAt,
+        scheduledEndAt: formData.has("scheduledEndAt")
+          ? planHasFeature(shopRecord.plan, PlanFeature.SCHEDULING)
+            ? toZonedDate(formData.get("scheduledEndAt"))
+            : null
+          : banner.scheduledEndAt,
       },
     });
 
@@ -1033,6 +1160,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return json({ success: false, error: "Video URL is required." }, { status: 400 });
     }
 
+    if (banner.layout === "slider" && shopRecord.plan === "free") {
+      const sliderCount = await db.bannerItem.count({
+        where: { bannerId: banner.id },
+      });
+      if (sliderCount >= 5) {
+        return json(
+          { success: false, error: "Free plan allows up to 5 slider items." },
+          { status: 400 }
+        );
+      }
+    }
+
     const parsed = parseVideoUrl(videoUrl);
     if (!parsed) {
       return json(
@@ -1090,7 +1229,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           showCountdown: false,
           countdownMode: "fixed",
           countdownEndAt: "",
-          countdownTimezone: "UTC",
+          countdownTimezone: defaultCountdownTimezone || "UTC",
           countdownDurationHours: "1",
           contentOrder: ["title", "description", "cta", "countdown"],
         },
@@ -1124,6 +1263,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     if (!imageId && !externalImageUrl) {
       return json({ success: false, error: "No image selected." }, { status: 400 });
+    }
+
+    if (banner.layout === "slider" && shopRecord.plan === "free") {
+      const sliderCount = await db.bannerItem.count({
+        where: { bannerId: banner.id },
+      });
+      if (sliderCount >= 5) {
+        return json(
+          { success: false, error: "Free plan allows up to 5 slider items." },
+          { status: 400 }
+        );
+      }
     }
 
     if (banner.layout === "hero") {
@@ -1226,9 +1377,43 @@ export async function action({ request, params }: ActionFunctionArgs) {
     if (formData.has("tagsJson")) {
       const tagsJson = formData.get("tagsJson") as string;
       const nextTags = tagsJson ? JSON.parse(tagsJson) : {};
+      const toZonedDate = (value: FormDataEntryValue | null) => {
+        if (!value) return null;
+        const raw = String(value).trim();
+        if (!raw) return null;
+        return zonedTimeToUtc(raw, defaultCountdownTimezone);
+      };
+      const scheduledStartAt = formData.has("scheduledStartAt")
+        ? planHasFeature(shopRecord.plan, PlanFeature.SCHEDULING)
+          ? ((formData.get("scheduledStartAt") as string) || null)
+            ? toZonedDate(formData.get("scheduledStartAt"))
+            : null
+          : null
+        : undefined;
+      const scheduledEndAt = formData.has("scheduledEndAt")
+        ? planHasFeature(shopRecord.plan, PlanFeature.SCHEDULING)
+          ? ((formData.get("scheduledEndAt") as string) || null)
+            ? toZonedDate(formData.get("scheduledEndAt"))
+            : null
+          : null
+        : undefined;
+
+      if (nextTags.countdownMode === "fixed" && nextTags.countdownEndAt) {
+        const converted = zonedTimeToUtc(nextTags.countdownEndAt, defaultCountdownTimezone);
+        nextTags.countdownEndAt = converted ? converted.toISOString() : "";
+      }
+      if (nextTags.countdownMode !== "fixed") {
+        nextTags.countdownEndAt = "";
+      }
+      nextTags.countdownTimezone = defaultCountdownTimezone;
+
       await db.bannerItem.update({
         where: { id: itemId, bannerId: banner.id },
-        data: { tags: nextTags },
+        data: {
+          tags: nextTags,
+          ...(scheduledStartAt !== undefined ? { scheduledStartAt } : {}),
+          ...(scheduledEndAt !== undefined ? { scheduledEndAt } : {}),
+        },
       });
       return json({ success: true, skipRevalidate: true });
     }
@@ -1288,7 +1473,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (action === "get-analytics") {
     const scope = (formData.get("scope") as string) || "banner";
     const rangeParam = formData.get("range") as string;
-    const rangeDays = Math.max(7, Math.min(90, Number(rangeParam) || 30));
+    const maxRange = planLimits.analyticsRange;
+    const rangeDays = Math.max(7, Math.min(maxRange, Number(rangeParam) || 7));
 
     const today = new Date();
     const startDate = new Date(today);
@@ -1340,6 +1526,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         { views: 0, clicks: 0 }
       );
 
+      const showCtr = planHasFeature(shopRecord.plan, PlanFeature.ANALYTICS_CTR);
+      const showChart = planHasFeature(shopRecord.plan, PlanFeature.ADVANCED_ANALYTICS);
       return json({
         success: true,
         scope,
@@ -1347,9 +1535,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
         totals: {
           views: totals.views,
           clicks: totals.clicks,
-          ctr: totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0,
+          ctr: showCtr ? (totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0) : 0,
         },
-        chart,
+        chart: showChart ? chart : [],
         skipRevalidate: true,
       });
     }
@@ -1385,6 +1573,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       { views: 0, clicks: 0 }
     );
 
+    const showCtr = planHasFeature(shopRecord.plan, PlanFeature.ANALYTICS_CTR);
+    const showChart = planHasFeature(shopRecord.plan, PlanFeature.ADVANCED_ANALYTICS);
     return json({
       success: true,
       scope,
@@ -1392,9 +1582,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
       totals: {
         views: totals.views,
         clicks: totals.clicks,
-        ctr: totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0,
+        ctr: showCtr ? (totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0) : 0,
       },
-      chart,
+      chart: showChart ? chart : [],
       skipRevalidate: true,
     });
   }
@@ -1490,6 +1680,7 @@ export default function BannerEdit() {
     shopifyProducts,
     shopifyFiles,
     productLoadError,
+    defaultCountdownTimezone,
   } = useLoaderData<typeof loader>();
   const location = useLocation();
   const editSearch = location.search || "";
@@ -1564,6 +1755,42 @@ export default function BannerEdit() {
   const [announcementClosableValue, setAnnouncementClosableValue] = useState(
     banner.announcementClosable ?? false
   );
+  const [announcementShowText, setAnnouncementShowText] = useState(
+    banner.announcementShowText ?? true
+  );
+  const [announcementShowCta, setAnnouncementShowCta] = useState(
+    banner.announcementShowCta ?? true
+  );
+  const [announcementShowCoupon, setAnnouncementShowCoupon] = useState(
+    banner.announcementShowCoupon ?? false
+  );
+  const [announcementCouponCode, setAnnouncementCouponCode] = useState(
+    banner.announcementCouponCode || ""
+  );
+  const normalizeAnnouncementOrder = (order?: string[]) => {
+    const base = ["text", "coupon", "cta", "countdown"];
+    if (!Array.isArray(order)) return base;
+    const filtered = order.filter((key) => base.includes(key));
+    base.forEach((key) => {
+      if (!filtered.includes(key)) filtered.push(key);
+    });
+    return filtered;
+  };
+
+  const [announcementContentOrder, setAnnouncementContentOrder] = useState<string[]>(
+    normalizeAnnouncementOrder(
+      Array.isArray(banner.announcementContentOrder)
+        ? (banner.announcementContentOrder as string[])
+        : undefined
+    )
+  );
+  const [announcementLayoutMode, setAnnouncementLayoutMode] = useState(
+    banner.announcementLayout || "inline"
+  );
+  const [announcementContentSpacing, setAnnouncementContentSpacing] = useState(
+    String(banner.announcementContentSpacing ?? 12)
+  );
+  const [announcementDragIndex, setAnnouncementDragIndex] = useState<number | null>(null);
   const [advancedValues, setAdvancedValues] = useState(() => ({
     bannerBackgroundColor: banner.bannerBackgroundColor || "",
     titleFontSize: banner.titleFontSize || "lg",
@@ -1576,12 +1803,21 @@ export default function BannerEdit() {
     ctaBordered: banner.ctaBordered ?? false,
     ctaRounded: banner.ctaRounded ?? true,
     ctaShadow: banner.ctaShadow ?? false,
+    ctaStyle: banner.ctaStyle || "button",
+    ctaUnderline: banner.ctaUnderline ?? false,
     countdownTextColor: banner.countdownTextColor || "",
     countdownBackgroundColor: banner.countdownBackgroundColor || "",
     countdownStyle: banner.countdownStyle || "solid",
+    countdownFontSize: banner.countdownFontSize || "md",
     announcementMarquee: banner.announcementMarquee ?? false,
     announcementAnimation: banner.announcementAnimation || "none",
     announcementCloseColor: banner.announcementCloseColor || "",
+    announcementSeparatorEnabled: banner.announcementSeparatorEnabled ?? false,
+    announcementSeparatorText: banner.announcementSeparatorText || "|",
+    announcementContentSpacing: banner.announcementContentSpacing ?? 12,
+    announcementCouponTextColor: banner.announcementCouponTextColor || "",
+    announcementCouponBorderColor: banner.announcementCouponBorderColor || "",
+    announcementCouponBackgroundColor: banner.announcementCouponBackgroundColor || "",
     sliderArrowStyle: banner.sliderArrowStyle || "chevron",
     sliderArrowColor: banner.sliderArrowColor || "",
     sliderBulletColor: banner.sliderBulletColor || "",
@@ -1607,13 +1843,25 @@ export default function BannerEdit() {
     banner.announcementCountdownEndAt || ""
   );
   const [announcementCountdownTimezone, setAnnouncementCountdownTimezone] = useState(
-    banner.announcementCountdownTimezone || "UTC"
+    banner.announcementCountdownTimezone || defaultCountdownTimezone || "UTC"
   );
   const [announcementCountdownDurationHours, setAnnouncementCountdownDurationHours] = useState(
     banner.announcementCountdownDurationHours || "1"
   );
+  const [announcementCountdownShowLabels, setAnnouncementCountdownShowLabels] = useState(
+    Boolean(banner.announcementCountdownShowLabels)
+  );
   const [statusValue, setStatusValue] = useState(
     banner.status === "scheduled" ? "draft" : banner.status
+  );
+  const [bannerScheduledEnabled, setBannerScheduledEnabled] = useState(
+    Boolean(banner.scheduledStartAt || banner.scheduledEndAt)
+  );
+  const [bannerScheduledStartAt, setBannerScheduledStartAt] = useState(
+    banner.scheduledStartAt || ""
+  );
+  const [bannerScheduledEndAt, setBannerScheduledEndAt] = useState(
+    banner.scheduledEndAt || ""
   );
   const [generatedImage, setGeneratedImage] = useState<{
     id: string;
@@ -1665,19 +1913,51 @@ export default function BannerEdit() {
   const [itemEditorOpen, setItemEditorOpen] = useState(false);
   const [itemEditor, setItemEditor] = useState<any | null>(null);
   const [itemEditorTab, setItemEditorTab] = useState(0);
+  const [itemScheduledEnabled, setItemScheduledEnabled] = useState(false);
+  const [itemScheduledStartAt, setItemScheduledStartAt] = useState("");
+  const [itemScheduledEndAt, setItemScheduledEndAt] = useState("");
+  const nowTimestamp = Date.now();
+  const isWithinSchedule = (start?: string, end?: string) => {
+    const startTime = start ? new Date(start).getTime() : null;
+    const endTime = end ? new Date(end).getTime() : null;
+    if (startTime && nowTimestamp < startTime) return false;
+    if (endTime && nowTimestamp > endTime) return false;
+    return true;
+  };
+  const bannerVisibleNow =
+    statusValue === "active" &&
+    (!bannerScheduledEnabled ||
+      isWithinSchedule(bannerScheduledStartAt, bannerScheduledEndAt));
   const [itemTagsDraft, setItemTagsDraft] = useState<Record<string, any>>({});
   const [contentDragIndex, setContentDragIndex] = useState<number | null>(null);
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
   const [bannerAnalyticsOpen, setBannerAnalyticsOpen] = useState(false);
   const [itemAnalyticsOpen, setItemAnalyticsOpen] = useState(false);
-  const [analyticsRange, setAnalyticsRange] = useState("30");
+  const maxAnalyticsRange = plan === "ultra" ? 90 : plan === "pro" ? 30 : 7;
+  const analyticsOptions =
+    plan === "ultra"
+      ? [
+          { label: "Last 7 days", value: "7" },
+          { label: "Last 30 days", value: "30" },
+          { label: "Last 90 days", value: "90" },
+        ]
+      : plan === "pro"
+      ? [
+          { label: "Last 7 days", value: "7" },
+          { label: "Last 30 days", value: "30" },
+        ]
+      : [{ label: "Last 7 days", value: "7" }];
+  const [analyticsRange, setAnalyticsRange] = useState(String(maxAnalyticsRange));
   const [bannerAnalytics, setBannerAnalytics] = useState<any | null>(null);
   const [itemAnalytics, setItemAnalytics] = useState<any | null>(null);
   const [selectedAnalyticsItemId, setSelectedAnalyticsItemId] = useState<string | null>(null);
+  const [bannerSaveError, setBannerSaveError] = useState<string | null>(null);
   const isVideoSubmitting = videoFetcher.state !== "idle";
   const [shopifyProductsState, setShopifyProductsState] = useState(shopifyProducts);
   const [shopifyFilesState, setShopifyFilesState] = useState(shopifyFiles);
   const [productLoadErrorState, setProductLoadErrorState] = useState(productLoadError);
+  const canUseSlider = true;
+  const canSchedule = planHasFeature(plan, PlanFeature.SCHEDULING);
 
   const storageUsageLabel = useMemo(() => {
     const usedGB = storageUsedMB / 1024;
@@ -1692,6 +1972,21 @@ export default function BannerEdit() {
       orderedItems.map((item) => item.externalImageUrl).filter(Boolean) as string[]
     );
   }, [orderedItems]);
+  const sliderLimitReached =
+    plan === "free" && layoutValue === "slider" && orderedItems.length >= 5;
+
+  useEffect(() => {
+    const data = updateFetcher.data as { success?: boolean; error?: string } | undefined;
+    if (!data) return;
+    if (data.error) {
+      setBannerSaveError(data.error);
+      if (data.error.includes("active banners")) {
+        setStatusValue("draft");
+      }
+    } else if (data.success) {
+      setBannerSaveError(null);
+    }
+  }, [updateFetcher.data, setStatusValue]);
 
   const titleError =
     titleValue.trim().length === 0 ? "Title is required" : undefined;
@@ -1721,14 +2016,27 @@ export default function BannerEdit() {
       announcementCtaUrl?: string;
       announcementCtaTarget?: string;
       announcementClosable?: boolean;
+      announcementShowText?: boolean;
+      announcementShowCta?: boolean;
+      announcementShowCoupon?: boolean;
+      announcementCouponCode?: string;
+      announcementContentOrder?: string[];
+      announcementLayout?: string;
+      announcementContentSpacing?: string;
       announcementCloseColor?: string;
       announcementMarquee?: boolean;
       announcementAnimation?: string;
+      announcementSeparatorEnabled?: boolean;
+      announcementSeparatorText?: string;
+      announcementCouponTextColor?: string;
+      announcementCouponBorderColor?: string;
+      announcementCouponBackgroundColor?: string;
       announcementShowCountdown?: boolean;
       announcementCountdownMode?: string;
       announcementCountdownEndAt?: string;
       announcementCountdownTimezone?: string;
       announcementCountdownDurationHours?: string;
+      announcementCountdownShowLabels?: boolean;
       bannerBackgroundColor?: string;
       titleFontSize?: string;
       descriptionFontSize?: string;
@@ -1740,10 +2048,15 @@ export default function BannerEdit() {
       ctaBordered?: boolean;
       ctaRounded?: boolean;
       ctaShadow?: boolean;
+      ctaStyle?: string;
+      ctaUnderline?: boolean;
       countdownTextColor?: string;
       countdownBackgroundColor?: string;
       countdownStyle?: string;
+      countdownFontSize?: string;
       customCss?: string;
+      scheduledStartAt?: string;
+      scheduledEndAt?: string;
     }) => {
       const formData = new FormData();
       formData.set("action", "update-banner");
@@ -1792,6 +2105,34 @@ export default function BannerEdit() {
         String(next?.announcementClosable ?? announcementClosableValue)
       );
       formData.set(
+        "announcementShowText",
+        String(next?.announcementShowText ?? announcementShowText)
+      );
+      formData.set(
+        "announcementShowCta",
+        String(next?.announcementShowCta ?? announcementShowCta)
+      );
+      formData.set(
+        "announcementShowCoupon",
+        String(next?.announcementShowCoupon ?? announcementShowCoupon)
+      );
+      formData.set(
+        "announcementCouponCode",
+        next?.announcementCouponCode ?? announcementCouponCode
+      );
+      formData.set(
+        "announcementContentOrder",
+        JSON.stringify(next?.announcementContentOrder ?? announcementContentOrder)
+      );
+      formData.set(
+        "announcementLayout",
+        next?.announcementLayout ?? announcementLayoutMode
+      );
+      formData.set(
+        "announcementContentSpacing",
+        next?.announcementContentSpacing ?? announcementContentSpacing
+      );
+      formData.set(
         "announcementCloseColor",
         next?.announcementCloseColor ?? advancedValues.announcementCloseColor
       );
@@ -1802,6 +2143,26 @@ export default function BannerEdit() {
       formData.set(
         "announcementAnimation",
         next?.announcementAnimation ?? advancedValues.announcementAnimation
+      );
+      formData.set(
+        "announcementSeparatorEnabled",
+        String(next?.announcementSeparatorEnabled ?? advancedValues.announcementSeparatorEnabled)
+      );
+      formData.set(
+        "announcementSeparatorText",
+        next?.announcementSeparatorText ?? advancedValues.announcementSeparatorText
+      );
+      formData.set(
+        "announcementCouponTextColor",
+        next?.announcementCouponTextColor ?? advancedValues.announcementCouponTextColor
+      );
+      formData.set(
+        "announcementCouponBorderColor",
+        next?.announcementCouponBorderColor ?? advancedValues.announcementCouponBorderColor
+      );
+      formData.set(
+        "announcementCouponBackgroundColor",
+        next?.announcementCouponBackgroundColor ?? advancedValues.announcementCouponBackgroundColor
       );
       formData.set(
         "announcementShowCountdown",
@@ -1822,6 +2183,10 @@ export default function BannerEdit() {
       formData.set(
         "announcementCountdownDurationHours",
         next?.announcementCountdownDurationHours ?? announcementCountdownDurationHours
+      );
+      formData.set(
+        "announcementCountdownShowLabels",
+        String(next?.announcementCountdownShowLabels ?? announcementCountdownShowLabels)
       );
       formData.set(
         "bannerBackgroundColor",
@@ -1846,6 +2211,11 @@ export default function BannerEdit() {
       formData.set("ctaBordered", String(next?.ctaBordered ?? advancedValues.ctaBordered));
       formData.set("ctaRounded", String(next?.ctaRounded ?? advancedValues.ctaRounded));
       formData.set("ctaShadow", String(next?.ctaShadow ?? advancedValues.ctaShadow));
+      formData.set("ctaStyle", next?.ctaStyle ?? advancedValues.ctaStyle);
+      formData.set(
+        "ctaUnderline",
+        String(next?.ctaUnderline ?? advancedValues.ctaUnderline)
+      );
       formData.set(
         "countdownTextColor",
         next?.countdownTextColor ?? advancedValues.countdownTextColor
@@ -1858,7 +2228,13 @@ export default function BannerEdit() {
         "countdownStyle",
         next?.countdownStyle ?? advancedValues.countdownStyle
       );
+      formData.set(
+        "countdownFontSize",
+        next?.countdownFontSize ?? advancedValues.countdownFontSize
+      );
       formData.set("customCss", next?.customCss ?? customCssValue);
+      formData.set("scheduledStartAt", next?.scheduledStartAt ?? bannerScheduledStartAt);
+      formData.set("scheduledEndAt", next?.scheduledEndAt ?? bannerScheduledEndAt);
       updateFetcher.submit(formData, { method: "post" });
     },
     [
@@ -1869,9 +2245,19 @@ export default function BannerEdit() {
       announcementCountdownEndAt,
       announcementCountdownMode,
       announcementCountdownTimezone,
+      announcementCountdownShowLabels,
       announcementShowCountdown,
       announcementText,
+      announcementShowText,
+      announcementShowCta,
+      announcementShowCoupon,
+      announcementCouponCode,
+      announcementContentOrder,
+      announcementLayoutMode,
+      announcementContentSpacing,
       customCssValue,
+      bannerScheduledStartAt,
+      bannerScheduledEndAt,
       descriptionValue,
       layoutValue,
       sliderTypeValue,
@@ -1996,7 +2382,7 @@ export default function BannerEdit() {
       showCountdown: false,
       countdownMode: "fixed",
       countdownEndAt: "",
-      countdownTimezone: "UTC",
+      countdownTimezone: defaultCountdownTimezone || "UTC",
       countdownDurationHours: "1",
       contentOrder: ["title", "description", "cta", "countdown"],
       showControls: true,
@@ -2185,6 +2571,23 @@ export default function BannerEdit() {
       return { ...prev, contentOrder: next };
     });
   }, [contentDragIndex]);
+
+  const handleAnnouncementDragOver = useCallback(
+    (targetIndex: number) => {
+      setAnnouncementContentOrder((prev) => {
+        const order = Array.isArray(prev) ? [...prev] : ["text", "cta", "countdown"];
+        if (announcementDragIndex === null || announcementDragIndex === targetIndex) {
+          return prev;
+        }
+        const next = [...order];
+        const [moved] = next.splice(announcementDragIndex, 1);
+        next.splice(targetIndex, 0, moved);
+        setAnnouncementDragIndex(targetIndex);
+        return next;
+      });
+    },
+    [announcementDragIndex]
+  );
 
   const handleGenerateSubmit = useCallback(
     (formData: FormData) => {
@@ -2532,6 +2935,11 @@ export default function BannerEdit() {
         <Layout.Section>
           <Card>
             <BlockStack gap="300">
+              {bannerSaveError ? (
+                <PolarisBanner tone="warning">
+                  <p>{bannerSaveError}</p>
+                </PolarisBanner>
+              ) : null}
               <InlineStack align="space-between" blockAlign="center">
                 <InlineStack gap="300" blockAlign="center">
                   <Text as="h2" variant="headingMd">
@@ -2555,6 +2963,12 @@ export default function BannerEdit() {
                     <Text as="span" variant="bodySm">
                       {statusValue === "active" ? "Published" : "Draft"}
                     </Text>
+                    {canSchedule &&
+                    statusValue === "active" &&
+                    bannerScheduledEnabled &&
+                    !isWithinSchedule(bannerScheduledStartAt, bannerScheduledEndAt) ? (
+                      <Badge tone="critical">Scheduled (hidden)</Badge>
+                    ) : null}
                   </InlineStack>
                 </InlineStack>
                 <Button
@@ -2568,6 +2982,50 @@ export default function BannerEdit() {
                 </Button>
               </InlineStack>
               <FormLayout>
+                <BlockStack gap="200">
+                  {canSchedule ? (
+                    <>
+                      <Checkbox
+                        label="Scheduled"
+                        checked={bannerScheduledEnabled}
+                        onChange={(value) => {
+                          setBannerScheduledEnabled(value);
+                          if (!value) {
+                            setBannerScheduledStartAt("");
+                            setBannerScheduledEndAt("");
+                            saveBanner({ scheduledStartAt: "", scheduledEndAt: "" });
+                          }
+                        }}
+                      />
+                      {bannerScheduledEnabled ? (
+                        <InlineStack gap="300" align="start">
+                          <TextField
+                            label="Start date"
+                            type="datetime-local"
+                            value={bannerScheduledStartAt}
+                            onChange={(value) => {
+                              setBannerScheduledStartAt(value);
+                              saveBanner({ scheduledStartAt: value });
+                            }}
+                          />
+                          <TextField
+                            label="End date"
+                            type="datetime-local"
+                            value={bannerScheduledEndAt}
+                            onChange={(value) => {
+                              setBannerScheduledEndAt(value);
+                              saveBanner({ scheduledEndAt: value });
+                            }}
+                          />
+                        </InlineStack>
+                      ) : null}
+                    </>
+                  ) : (
+                    <PolarisBanner tone="warning">
+                      <p>Scheduling is available on the Pro and Ultra plans.</p>
+                    </PolarisBanner>
+                  )}
+                </BlockStack>
                 <BlockStack gap="200">
                   <Text as="p" variant="bodySm">
                     Layout
@@ -2770,110 +3228,229 @@ export default function BannerEdit() {
                   </BlockStack>
                 ) : null}
                 {layoutValue === "announcement" ? (
-                  <BlockStack gap="200">
-                    <TextField
-                      label="Announcement text"
-                      value={announcementText}
-                      onChange={(value) => {
-                        setAnnouncementText(value);
-                        saveBanner({ announcementText: value });
-                      }}
-                      placeholder="Your announcement text"
-                      multiline={2}
-                    />
-                    <TextField
-                      label="CTA text"
-                      value={announcementCtaText}
-                      onChange={(value) => {
-                        setAnnouncementCtaText(value);
-                        saveBanner({ announcementCtaText: value });
-                      }}
-                      placeholder="Learn more"
-                    />
-                    <TextField
-                      label="CTA URL"
-                      value={announcementCtaUrl}
-                      onChange={(value) => {
-                        setAnnouncementCtaUrl(value);
-                        saveBanner({ announcementCtaUrl: value });
-                      }}
-                      placeholder="https://"
-                    />
-                    <Select
-                      label="CTA target"
-                      options={[
-                        { label: "Same tab", value: "_self" },
-                        { label: "New tab", value: "_blank" },
-                        { label: "Parent frame", value: "_parent" },
-                        { label: "Top frame", value: "_top" },
-                      ]}
-                      value={announcementCtaTarget}
-                      onChange={(value) => {
-                        setAnnouncementCtaTarget(value);
-                        saveBanner({ announcementCtaTarget: value });
-                      }}
-                    />
+                  <BlockStack gap="300">
+                    <Text as="p" variant="bodySm">
+                      Reorder and toggle what appears on this banner.
+                    </Text>
+                    {announcementContentOrder.map((key, index) => (
+                      <div
+                        key={key}
+                        draggable
+                        onDragStart={() => setAnnouncementDragIndex(index)}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          handleAnnouncementDragOver(index);
+                        }}
+                        onDragEnd={() => {
+                          setAnnouncementDragIndex(null);
+                          saveBanner({ announcementContentOrder });
+                        }}
+                        className="bainners-content-card"
+                      >
+                        <Card padding="300">
+                          <BlockStack gap="200">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" variant="headingSm">
+                                {key === "text"
+                                  ? "Announcement text"
+                                  : key === "cta"
+                                  ? "CTA"
+                                  : key === "coupon"
+                                  ? "Coupon"
+                                  : "Countdown"}
+                              </Text>
+                            </InlineStack>
+
+                            {key === "text" ? (
+                              <BlockStack gap="200">
+                                <Checkbox
+                                  label="Show text"
+                                  checked={announcementShowText}
+                                  onChange={(value) => {
+                                    setAnnouncementShowText(value);
+                                    saveBanner({ announcementShowText: value });
+                                  }}
+                                />
+                                {announcementShowText ? (
+                                  <TextField
+                                    label="Announcement text"
+                                    value={announcementText}
+                                    onChange={(value) => {
+                                      setAnnouncementText(value);
+                                      saveBanner({ announcementText: value });
+                                    }}
+                                    placeholder="Your announcement text"
+                                    helpText="Emojis supported."
+                                    multiline={2}
+                                  />
+                                ) : null}
+                              </BlockStack>
+                            ) : null}
+
+                            {key === "cta" ? (
+                              <BlockStack gap="200">
+                                <Checkbox
+                                  label="Show CTA"
+                                  checked={announcementShowCta}
+                                  onChange={(value) => {
+                                    setAnnouncementShowCta(value);
+                                    saveBanner({ announcementShowCta: value });
+                                  }}
+                                />
+                                {announcementShowCta ? (
+                                  <BlockStack gap="200">
+                                    <TextField
+                                      label="CTA text"
+                                      value={announcementCtaText}
+                                      onChange={(value) => {
+                                        setAnnouncementCtaText(value);
+                                        saveBanner({ announcementCtaText: value });
+                                      }}
+                                      placeholder="Learn more"
+                                    />
+                                    <TextField
+                                      label="CTA URL"
+                                      value={announcementCtaUrl}
+                                      onChange={(value) => {
+                                        setAnnouncementCtaUrl(value);
+                                        saveBanner({ announcementCtaUrl: value });
+                                      }}
+                                      placeholder="https://"
+                                    />
+                                    <Select
+                                      label="CTA target"
+                                      options={[
+                                        { label: "Same tab", value: "_self" },
+                                        { label: "New tab", value: "_blank" },
+                                        { label: "Parent frame", value: "_parent" },
+                                        { label: "Top frame", value: "_top" },
+                                      ]}
+                                      value={announcementCtaTarget}
+                                      onChange={(value) => {
+                                        setAnnouncementCtaTarget(value);
+                                        saveBanner({ announcementCtaTarget: value });
+                                      }}
+                                    />
+                                  </BlockStack>
+                                ) : null}
+                              </BlockStack>
+                            ) : null}
+
+                            {key === "coupon" ? (
+                              <BlockStack gap="200">
+                                <Checkbox
+                                  label="Show coupon"
+                                  checked={announcementShowCoupon}
+                                  onChange={(value) => {
+                                    setAnnouncementShowCoupon(value);
+                                    saveBanner({ announcementShowCoupon: value });
+                                  }}
+                                />
+                                {announcementShowCoupon ? (
+                                  <TextField
+                                    label="Coupon code"
+                                    value={announcementCouponCode}
+                                    onChange={(value) => {
+                                      setAnnouncementCouponCode(value);
+                                      saveBanner({ announcementCouponCode: value });
+                                    }}
+                                    placeholder="SAVE10"
+                                  />
+                                ) : null}
+                              </BlockStack>
+                            ) : null}
+
+                            {key === "countdown" ? (
+                              <BlockStack gap="200">
+                                <Checkbox
+                                  label="Show countdown"
+                                  checked={announcementShowCountdown}
+                                  onChange={(value) => {
+                                    setAnnouncementShowCountdown(value);
+                                    saveBanner({ announcementShowCountdown: value });
+                                  }}
+                                />
+                                {announcementShowCountdown ? (
+                                  <BlockStack gap="200">
+                                    <Checkbox
+                                      label="Show labels"
+                                      checked={announcementCountdownShowLabels}
+                                      onChange={(value) => {
+                                        setAnnouncementCountdownShowLabels(value);
+                                        saveBanner({ announcementCountdownShowLabels: value });
+                                      }}
+                                    />
+                                    <Select
+                                      label="Mode"
+                                      options={[
+                                        { label: "Fixed end time", value: "fixed" },
+                                        { label: "Evergreen (relative)", value: "evergreen" },
+                                      ]}
+                                      value={announcementCountdownMode}
+                                      onChange={(value) => {
+                                        setAnnouncementCountdownMode(value);
+                                        saveBanner({ announcementCountdownMode: value });
+                                      }}
+                                    />
+                                    {announcementCountdownMode === "evergreen" ? (
+                                      <TextField
+                                        label="Duration (hours)"
+                                        type="number"
+                                        value={announcementCountdownDurationHours}
+                                        onChange={(value) => {
+                                          setAnnouncementCountdownDurationHours(value);
+                                          saveBanner({ announcementCountdownDurationHours: value });
+                                        }}
+                                      />
+                                    ) : (
+                                      <TextField
+                                        label="End date"
+                                        type="datetime-local"
+                                        value={announcementCountdownEndAt}
+                                        onChange={(value) => {
+                                          setAnnouncementCountdownEndAt(value);
+                                          saveBanner({ announcementCountdownEndAt: value });
+                                        }}
+                                      />
+                                    )}
+                                  </BlockStack>
+                                ) : null}
+                              </BlockStack>
+                            ) : null}
+                          </BlockStack>
+                        </Card>
+                      </div>
+                    ))}
+
+                    <InlineStack gap="300" align="start">
+                      <Select
+                        label="Content layout"
+                        options={[
+                          { label: "Inline", value: "inline" },
+                          { label: "Stacked", value: "stacked" },
+                        ]}
+                        value={announcementLayoutMode}
+                        onChange={(value) => {
+                          setAnnouncementLayoutMode(value);
+                          if (value === "stacked") {
+                            setAdvancedValues((prev) => ({ ...prev, announcementMarquee: false }));
+                            setAdvancedDraft((prev) => ({ ...prev, announcementMarquee: false }));
+                            saveBanner({ announcementLayout: value, announcementMarquee: false });
+                          } else {
+                            saveBanner({ announcementLayout: value });
+                          }
+                        }}
+                      />
+                    </InlineStack>
+
                     <Checkbox
-                      label="Allow close"
+                      label="Show close button"
                       checked={announcementClosableValue}
                       onChange={(value) => {
                         setAnnouncementClosableValue(value);
                         saveBanner({ announcementClosable: value });
                       }}
                     />
-                    <Checkbox
-                      label="Show countdown"
-                      checked={announcementShowCountdown}
-                      onChange={(value) => {
-                        setAnnouncementShowCountdown(value);
-                        saveBanner({ announcementShowCountdown: value });
-                      }}
-                    />
-                    {announcementShowCountdown ? (
-                      <BlockStack gap="200">
-                        <Select
-                          label="Mode"
-                          options={[
-                            { label: "Fixed end time", value: "fixed" },
-                            { label: "Evergreen (relative)", value: "evergreen" },
-                          ]}
-                          value={announcementCountdownMode}
-                          onChange={(value) => {
-                            setAnnouncementCountdownMode(value);
-                            saveBanner({ announcementCountdownMode: value });
-                          }}
-                        />
-                        {announcementCountdownMode === "evergreen" ? (
-                          <TextField
-                            label="Duration (hours)"
-                            type="number"
-                            value={announcementCountdownDurationHours}
-                            onChange={(value) => {
-                              setAnnouncementCountdownDurationHours(value);
-                              saveBanner({ announcementCountdownDurationHours: value });
-                            }}
-                          />
-                        ) : (
-                          <TextField
-                            label="End date"
-                            type="datetime-local"
-                            value={announcementCountdownEndAt}
-                            onChange={(value) => {
-                              setAnnouncementCountdownEndAt(value);
-                              saveBanner({ announcementCountdownEndAt: value });
-                            }}
-                          />
-                        )}
-                        <TextField
-                          label="Timezone"
-                          value={announcementCountdownTimezone}
-                          onChange={(value) => {
-                            setAnnouncementCountdownTimezone(value);
-                            saveBanner({ announcementCountdownTimezone: value });
-                          }}
-                        />
-                      </BlockStack>
-                    ) : null}
                   </BlockStack>
                 ) : null}
               </FormLayout>
@@ -2893,12 +3470,19 @@ export default function BannerEdit() {
                     <Button
                       onClick={() => setModalOpen(true)}
                       variant="primary"
-                      disabled={layoutValue === "hero" && orderedItems.length >= 1}
+                      disabled={
+                        (layoutValue === "hero" && orderedItems.length >= 1) || sliderLimitReached
+                      }
                     >
                       Add item
                     </Button>
                   ) : null}
                 </InlineStack>
+                {sliderLimitReached ? (
+                  <PolarisBanner tone="warning">
+                    <p>Free plan allows up to 5 slider items. Upgrade to add more.</p>
+                  </PolarisBanner>
+                ) : null}
                 {orderedItems.length === 0 ? (
                   <EmptyState
                     heading="No items yet"
@@ -2906,6 +3490,7 @@ export default function BannerEdit() {
                       content: "Add item",
                       onAction: () => setModalOpen(true),
                       primary: true,
+                      disabled: sliderLimitReached,
                     }}
                     image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
                   >
@@ -3011,6 +3596,11 @@ export default function BannerEdit() {
                                     size="slim"
                                     onClick={() => {
                                       setItemEditor({ ...item });
+                                      const hasSchedule =
+                                        Boolean(item.scheduledStartAt) || Boolean(item.scheduledEndAt);
+                                      setItemScheduledEnabled(hasSchedule);
+                                      setItemScheduledStartAt(item.scheduledStartAt || "");
+                                      setItemScheduledEndAt(item.scheduledEndAt || "");
                                       setItemEditorOpen(true);
                                     }}
                                   >
@@ -3027,6 +3617,20 @@ export default function BannerEdit() {
                                     Analytics
                                   </Button>
                                 </div>
+                                {canSchedule && (item.scheduledStartAt || item.scheduledEndAt) && (
+                                  <InlineStack gap="200" blockAlign="center">
+                                    <Text as="p" variant="bodySm">
+                                      Scheduled:{" "}
+                                      {item.scheduledStartAt || "—"} - {item.scheduledEndAt || "—"}
+                                    </Text>
+                                    {!isWithinSchedule(
+                                      item.scheduledStartAt,
+                                      item.scheduledEndAt
+                                    ) ? (
+                                      <Badge tone="critical">Scheduled (hidden)</Badge>
+                                    ) : null}
+                                  </InlineStack>
+                                )}
                                 {(Array.isArray(item.tags?.contentOrder)
                                   ? item.tags.contentOrder
                                   : ["title", "description", "cta", "countdown"]
@@ -3804,9 +4408,23 @@ export default function BannerEdit() {
             formData.set("action", "update-banner-item");
             formData.set("itemId", itemEditor.id);
             formData.set("tagsJson", JSON.stringify(nextTags));
+            formData.set(
+              "scheduledStartAt",
+              itemScheduledEnabled ? itemScheduledStartAt : ""
+            );
+            formData.set("scheduledEndAt", itemScheduledEnabled ? itemScheduledEndAt : "");
             itemUpdateFetcher.submit(formData, { method: "post" });
             setOrderedItems((prev) =>
-              prev.map((item) => (item.id === itemEditor.id ? { ...item, tags: nextTags } : item))
+              prev.map((item) =>
+                item.id === itemEditor.id
+                  ? {
+                      ...item,
+                      tags: nextTags,
+                      scheduledStartAt: itemScheduledEnabled ? itemScheduledStartAt : "",
+                      scheduledEndAt: itemScheduledEnabled ? itemScheduledEndAt : "",
+                    }
+                  : item
+              )
             );
             setItemEditorOpen(false);
           },
@@ -3957,6 +4575,13 @@ export default function BannerEdit() {
                         />
                         {itemTagsDraft.showCountdown ? (
                           <BlockStack gap="200">
+                            <Checkbox
+                              label="Show labels"
+                              checked={Boolean(itemTagsDraft.countdownShowLabels)}
+                              onChange={(value) =>
+                                updateItemTagsDraft({ countdownShowLabels: value })
+                              }
+                            />
                             <Select
                               label="Mode"
                               options={[
@@ -3985,13 +4610,6 @@ export default function BannerEdit() {
                                 }
                               />
                             )}
-                            <TextField
-                              label="Timezone"
-                              value={itemTagsDraft.countdownTimezone || "UTC"}
-                              onChange={(value) =>
-                                updateItemTagsDraft({ countdownTimezone: value })
-                              }
-                            />
                           </BlockStack>
                         ) : null}
                       </BlockStack>
@@ -4003,6 +4621,43 @@ export default function BannerEdit() {
             </BlockStack>
           ) : (
             <BlockStack gap="300" padding="300">
+              <BlockStack gap="200">
+                {canSchedule ? (
+                  <>
+                    <Checkbox
+                      label="Scheduled"
+                      checked={itemScheduledEnabled}
+                      onChange={(value) => {
+                        setItemScheduledEnabled(value);
+                        if (!value) {
+                          setItemScheduledStartAt("");
+                          setItemScheduledEndAt("");
+                        }
+                      }}
+                    />
+                    {itemScheduledEnabled ? (
+                      <InlineStack gap="300" align="start">
+                        <TextField
+                          label="Start date"
+                          type="datetime-local"
+                          value={itemScheduledStartAt}
+                          onChange={setItemScheduledStartAt}
+                        />
+                        <TextField
+                          label="End date"
+                          type="datetime-local"
+                          value={itemScheduledEndAt}
+                          onChange={setItemScheduledEndAt}
+                        />
+                      </InlineStack>
+                    ) : null}
+                  </>
+                ) : (
+                  <PolarisBanner tone="warning">
+                    <p>Scheduling is available on the Pro and Ultra plans.</p>
+                  </PolarisBanner>
+                )}
+              </BlockStack>
               <Checkbox
                 label="Show overlay"
                 checked={Boolean(itemTagsDraft.showOverlay)}
@@ -4084,11 +4739,7 @@ export default function BannerEdit() {
               <Select
                 label="Date range"
                 labelHidden
-                options={[
-                  { label: "Last 7 days", value: "7" },
-                  { label: "Last 30 days", value: "30" },
-                  { label: "Last 90 days", value: "90" },
-                ]}
+                options={analyticsOptions}
                 value={analyticsRange}
                 onChange={(value) => setAnalyticsRange(value)}
               />
@@ -4114,37 +4765,41 @@ export default function BannerEdit() {
                   </Text>
                 </BlockStack>
               </Card>
-              <Card background="bg-surface-secondary">
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    CTR
-                  </Text>
-                  <Text as="p" variant="headingMd">
-                    {(bannerAnalytics?.totals?.ctr ?? 0).toFixed(2)}%
-                  </Text>
-                </BlockStack>
-              </Card>
+              {plan !== "free" ? (
+                <Card background="bg-surface-secondary">
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      CTR
+                    </Text>
+                    <Text as="p" variant="headingMd">
+                      {(bannerAnalytics?.totals?.ctr ?? 0).toFixed(2)}%
+                    </Text>
+                  </BlockStack>
+                </Card>
+              ) : null}
             </InlineStack>
-            <div className="bainners-analytics-chart">
-              {(bannerAnalytics?.chart || []).map((row: any) => (
-                <div key={row.date} className="bainners-analytics-bar">
-                  <div
-                    className="bainners-analytics-bar-fill"
-                    style={{
-                      height: `${Math.round(
-                        (row.views /
-                          Math.max(
-                            1,
-                            ...(bannerAnalytics?.chart || []).map((entry: any) => entry.views)
-                          )) *
-                          100
-                      )}%`,
-                    }}
-                  />
-                  <span>{String(row.date || "").slice(5)}</span>
-                </div>
-              ))}
-            </div>
+            {plan !== "free" ? (
+              <div className="bainners-analytics-chart">
+                {(bannerAnalytics?.chart || []).map((row: any) => (
+                  <div key={row.date} className="bainners-analytics-bar">
+                    <div
+                      className="bainners-analytics-bar-fill"
+                      style={{
+                        height: `${Math.round(
+                          (row.views /
+                            Math.max(
+                              1,
+                              ...(bannerAnalytics?.chart || []).map((entry: any) => entry.views)
+                            )) *
+                            100
+                        )}%`,
+                      }}
+                    />
+                    <span>{String(row.date || "").slice(5)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </BlockStack>
         </Modal.Section>
       </Modal>
@@ -4164,11 +4819,7 @@ export default function BannerEdit() {
               <Select
                 label="Date range"
                 labelHidden
-                options={[
-                  { label: "Last 7 days", value: "7" },
-                  { label: "Last 30 days", value: "30" },
-                  { label: "Last 90 days", value: "90" },
-                ]}
+                options={analyticsOptions}
                 value={analyticsRange}
                 onChange={(value) => setAnalyticsRange(value)}
               />
@@ -4194,37 +4845,41 @@ export default function BannerEdit() {
                   </Text>
                 </BlockStack>
               </Card>
-              <Card background="bg-surface-secondary">
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    CTR
-                  </Text>
-                  <Text as="p" variant="headingMd">
-                    {(itemAnalytics?.totals?.ctr ?? 0).toFixed(2)}%
-                  </Text>
-                </BlockStack>
-              </Card>
+              {plan !== "free" ? (
+                <Card background="bg-surface-secondary">
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      CTR
+                    </Text>
+                    <Text as="p" variant="headingMd">
+                      {(itemAnalytics?.totals?.ctr ?? 0).toFixed(2)}%
+                    </Text>
+                  </BlockStack>
+                </Card>
+              ) : null}
             </InlineStack>
-            <div className="bainners-analytics-chart">
-              {(itemAnalytics?.chart || []).map((row: any) => (
-                <div key={row.date} className="bainners-analytics-bar">
-                  <div
-                    className="bainners-analytics-bar-fill"
-                    style={{
-                      height: `${Math.round(
-                        (row.views /
-                          Math.max(
-                            1,
-                            ...(itemAnalytics?.chart || []).map((entry: any) => entry.views)
-                          )) *
-                          100
-                      )}%`,
-                    }}
-                  />
-                  <span>{String(row.date || "").slice(5)}</span>
-                </div>
-              ))}
-            </div>
+            {plan !== "free" ? (
+              <div className="bainners-analytics-chart">
+                {(itemAnalytics?.chart || []).map((row: any) => (
+                  <div key={row.date} className="bainners-analytics-bar">
+                    <div
+                      className="bainners-analytics-bar-fill"
+                      style={{
+                        height: `${Math.round(
+                          (row.views /
+                            Math.max(
+                              1,
+                              ...(itemAnalytics?.chart || []).map((entry: any) => entry.views)
+                            )) *
+                            100
+                        )}%`,
+                      }}
+                    />
+                    <span>{String(row.date || "").slice(5)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </BlockStack>
         </Modal.Section>
       </Modal>
@@ -4238,7 +4893,17 @@ export default function BannerEdit() {
           onAction: () => {
             setCustomCssValue(customCssDraft);
             setAdvancedValues(advancedDraft);
-            saveBanner({ ...advancedDraft, customCss: customCssDraft });
+            if (layoutValue === "announcement") {
+              setAnnouncementContentSpacing(String(advancedDraft.announcementContentSpacing ?? 12));
+            }
+            saveBanner({
+              ...advancedDraft,
+              customCss: customCssDraft,
+              announcementContentSpacing:
+                layoutValue === "announcement"
+                  ? String(advancedDraft.announcementContentSpacing ?? 12)
+                  : undefined,
+            });
             setAdvancedOpen(false);
           },
         }}
@@ -4268,7 +4933,7 @@ export default function BannerEdit() {
               </Text>
               <InlineStack gap="300" align="start">
                 <Select
-                  label="Title size"
+                  label={layoutValue === "announcement" ? "Text size" : "Title size"}
                   options={[
                     { label: "Small", value: "sm" },
                     { label: "Medium", value: "md" },
@@ -4278,59 +4943,86 @@ export default function BannerEdit() {
                   value={advancedDraft.titleFontSize}
                   onChange={(value) => updateAdvancedDraft({ titleFontSize: value })}
                 />
-                {renderColorField("Title color", advancedDraft.titleColor, (value) =>
-                  updateAdvancedDraft({ titleColor: value })
+                {renderColorField(
+                  layoutValue === "announcement" ? "Text color" : "Title color",
+                  advancedDraft.titleColor,
+                  (value) => updateAdvancedDraft({ titleColor: value })
                 )}
               </InlineStack>
-              <InlineStack gap="300" align="start">
-                <Select
-                  label="Description size"
-                  options={[
-                    { label: "Small", value: "sm" },
-                    { label: "Medium", value: "md" },
-                    { label: "Large", value: "lg" },
-                    { label: "Extra large", value: "xl" },
-                  ]}
-                  value={advancedDraft.descriptionFontSize}
-                  onChange={(value) => updateAdvancedDraft({ descriptionFontSize: value })}
-                />
-                {renderColorField("Description color", advancedDraft.descriptionColor, (value) =>
-                  updateAdvancedDraft({ descriptionColor: value })
-                )}
-              </InlineStack>
+              {layoutValue !== "announcement" ? (
+                <InlineStack gap="300" align="start">
+                  <Select
+                    label="Description size"
+                    options={[
+                      { label: "Small", value: "sm" },
+                      { label: "Medium", value: "md" },
+                      { label: "Large", value: "lg" },
+                      { label: "Extra large", value: "xl" },
+                    ]}
+                    value={advancedDraft.descriptionFontSize}
+                    onChange={(value) => updateAdvancedDraft({ descriptionFontSize: value })}
+                  />
+                  {renderColorField("Description color", advancedDraft.descriptionColor, (value) =>
+                    updateAdvancedDraft({ descriptionColor: value })
+                  )}
+                </InlineStack>
+              ) : null}
             </BlockStack>
 
             <BlockStack gap="200">
               <Text as="h3" variant="headingSm">
                 CTA styles
               </Text>
+              <Select
+                label="CTA style"
+                options={[
+                  { label: "Button", value: "button" },
+                  { label: "Link", value: "link" },
+                ]}
+                value={advancedDraft.ctaStyle || "button"}
+                onChange={(value) => updateAdvancedDraft({ ctaStyle: value })}
+              />
               <InlineStack gap="300" align="start">
                 {renderColorField("CTA text color", advancedDraft.ctaTextColor, (value) =>
                   updateAdvancedDraft({ ctaTextColor: value })
                 )}
-                {renderColorField("CTA background", advancedDraft.ctaBackgroundColor, (value) =>
-                  updateAdvancedDraft({ ctaBackgroundColor: value })
-                )}
-                {renderColorField("CTA border", advancedDraft.ctaBorderColor, (value) =>
-                  updateAdvancedDraft({ ctaBorderColor: value })
-                )}
+                {advancedDraft.ctaStyle !== "link" ? (
+                  <>
+                    {renderColorField("CTA background", advancedDraft.ctaBackgroundColor, (value) =>
+                      updateAdvancedDraft({ ctaBackgroundColor: value })
+                    )}
+                    {renderColorField("CTA border", advancedDraft.ctaBorderColor, (value) =>
+                      updateAdvancedDraft({ ctaBorderColor: value })
+                    )}
+                  </>
+                ) : null}
               </InlineStack>
               <InlineStack gap="300" align="start">
-                <Checkbox
-                  label="Bordered"
-                  checked={advancedDraft.ctaBordered}
-                  onChange={(value) => updateAdvancedDraft({ ctaBordered: value })}
-                />
-                <Checkbox
-                  label="Rounded"
-                  checked={advancedDraft.ctaRounded}
-                  onChange={(value) => updateAdvancedDraft({ ctaRounded: value })}
-                />
-                <Checkbox
-                  label="Shadow"
-                  checked={advancedDraft.ctaShadow}
-                  onChange={(value) => updateAdvancedDraft({ ctaShadow: value })}
-                />
+                {advancedDraft.ctaStyle !== "link" ? (
+                  <>
+                    <Checkbox
+                      label="Bordered"
+                      checked={advancedDraft.ctaBordered}
+                      onChange={(value) => updateAdvancedDraft({ ctaBordered: value })}
+                    />
+                    <Checkbox
+                      label="Rounded"
+                      checked={advancedDraft.ctaRounded}
+                      onChange={(value) => updateAdvancedDraft({ ctaRounded: value })}
+                    />
+                    <Checkbox
+                      label="Shadow"
+                      checked={advancedDraft.ctaShadow}
+                      onChange={(value) => updateAdvancedDraft({ ctaShadow: value })}
+                    />
+                  </>
+                ) : (
+                  <Checkbox
+                    label="Underline"
+                    checked={advancedDraft.ctaUnderline}
+                    onChange={(value) => updateAdvancedDraft({ ctaUnderline: value })}
+                  />
+                )}
               </InlineStack>
             </BlockStack>
 
@@ -4343,11 +5035,23 @@ export default function BannerEdit() {
                   label="Countdown style"
                   options={[
                     { label: "Solid", value: "solid" },
-                    { label: "Outline", value: "outline" },
+                    { label: "Text only", value: "text" },
+                    { label: "Segments", value: "segments" },
                     { label: "Pill", value: "pill" },
                   ]}
                   value={advancedDraft.countdownStyle}
                   onChange={(value) => updateAdvancedDraft({ countdownStyle: value })}
+                />
+                <Select
+                  label="Countdown size"
+                  options={[
+                    { label: "Small", value: "sm" },
+                    { label: "Medium", value: "md" },
+                    { label: "Large", value: "lg" },
+                    { label: "Extra large", value: "xl" },
+                  ]}
+                  value={advancedDraft.countdownFontSize || "md"}
+                  onChange={(value) => updateAdvancedDraft({ countdownFontSize: value })}
                 />
                 {renderColorField(
                   "Countdown text color",
@@ -4401,17 +5105,26 @@ export default function BannerEdit() {
               </BlockStack>
             ) : null}
 
-            {layoutValue === "announcement" ? (
-              <BlockStack gap="200">
-                <Text as="h3" variant="headingSm">
-                  Announcement motion
-                </Text>
+                {layoutValue === "announcement" ? (
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">
+                      Announcement motion
+                    </Text>
                 <InlineStack gap="300" align="start">
-                  <Checkbox
-                    label="Marquee"
-                    checked={advancedDraft.announcementMarquee}
-                    onChange={(value) => updateAdvancedDraft({ announcementMarquee: value })}
-                  />
+                  {announcementLayoutMode === "inline" ? (
+                    <Checkbox
+                      label="Marquee"
+                      checked={advancedDraft.announcementMarquee}
+                      onChange={(value) => {
+                        updateAdvancedDraft({
+                          announcementMarquee: value,
+                          announcementSeparatorEnabled: value
+                            ? false
+                            : advancedDraft.announcementSeparatorEnabled,
+                        });
+                      }}
+                    />
+                  ) : null}
                   <Select
                     label="Animation"
                     options={[
@@ -4429,13 +5142,67 @@ export default function BannerEdit() {
                     (value) => updateAdvancedDraft({ announcementCloseColor: value })
                   )}
                 </InlineStack>
-              </BlockStack>
-            ) : null}
+                {announcementLayoutMode === "inline" && !advancedDraft.announcementMarquee ? (
+                  <InlineStack gap="300" align="start">
+                    <Checkbox
+                      label="Show separator"
+                      checked={advancedDraft.announcementSeparatorEnabled}
+                      onChange={(value) =>
+                        updateAdvancedDraft({ announcementSeparatorEnabled: value })
+                      }
+                    />
+                    {advancedDraft.announcementSeparatorEnabled ? (
+                      <TextField
+                        label="Separator"
+                        value={advancedDraft.announcementSeparatorText || "|"}
+                        onChange={(value) =>
+                          updateAdvancedDraft({ announcementSeparatorText: value })
+                        }
+                      />
+                    ) : null}
+                  </InlineStack>
+                ) : null}
+                    {announcementLayoutMode === "stacked" ? (
+                      <TextField
+                        label="Content spacing (px)"
+                        type="number"
+                        value={String(advancedDraft.announcementContentSpacing ?? 12)}
+                        onChange={(value) =>
+                          updateAdvancedDraft({ announcementContentSpacing: Number(value || 12) })
+                        }
+                        min={0}
+                        step={1}
+                      />
+                    ) : null}
+                    <InlineStack gap="300" align="start">
+                      {renderColorField(
+                        "Coupon text color",
+                        advancedDraft.announcementCouponTextColor,
+                        (value) => updateAdvancedDraft({ announcementCouponTextColor: value })
+                      )}
+                      {renderColorField(
+                        "Coupon border",
+                        advancedDraft.announcementCouponBorderColor,
+                        (value) => updateAdvancedDraft({ announcementCouponBorderColor: value })
+                      )}
+                      {renderColorField(
+                        "Coupon background",
+                        advancedDraft.announcementCouponBackgroundColor,
+                        (value) => updateAdvancedDraft({ announcementCouponBackgroundColor: value })
+                      )}
+                    </InlineStack>
+                  </BlockStack>
+                ) : null}
 
             <BlockStack gap="200">
               <Text as="h3" variant="headingSm">
                 Additional CSS (optional)
               </Text>
+              {plan === "free" ? (
+                <PolarisBanner tone="warning">
+                  <p>Additional CSS is available on the Pro and Ultra plans.</p>
+                </PolarisBanner>
+              ) : null}
               <TextField
                 label="Custom CSS"
                 labelHidden
@@ -4444,6 +5211,7 @@ export default function BannerEdit() {
                 value={customCssDraft}
                 onChange={setCustomCssDraft}
                 monospaced
+                disabled={plan === "free"}
               />
             </BlockStack>
           </BlockStack>

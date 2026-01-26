@@ -1,6 +1,7 @@
 import { type LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
+import { planHasFeature, PlanFeature } from "../lib/plans";
 
 function escapeHtml(value: string) {
   return value
@@ -23,6 +24,12 @@ const DESCRIPTION_SIZE_MAP: Record<string, string> = {
   md: "16px",
   lg: "18px",
   xl: "20px",
+};
+const COUNTDOWN_SIZE_MAP: Record<string, string> = {
+  sm: "12px",
+  md: "14px",
+  lg: "16px",
+  xl: "18px",
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -64,7 +71,44 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
   }
 
-  const items = banner.bannerItems;
+  const translations = {
+    couponCopied: shopRecord.defaultTranslationCouponCopied || "Coupon copied",
+    days: shopRecord.defaultTranslationDays || "Days",
+    hours: shopRecord.defaultTranslationHours || "Hours",
+    minutes: shopRecord.defaultTranslationMinutes || "Minutes",
+    seconds: shopRecord.defaultTranslationSeconds || "Seconds",
+  };
+
+  const now = Date.now();
+  const isWithinSchedule = (start?: Date | string | null, end?: Date | string | null) => {
+    const startTime = start ? new Date(start).getTime() : null;
+    const endTime = end ? new Date(end).getTime() : null;
+    if (startTime && now < startTime) return false;
+    if (endTime && now > endTime) return false;
+    return true;
+  };
+
+  const canSchedule = planHasFeature(shopRecord.plan, PlanFeature.SCHEDULING);
+  if (shopRecord.plan === "free") {
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    const monthlyViews = await db.bannerAnalytic.aggregate({
+      where: { shopId: shopRecord.id, date: { gte: monthStart } },
+      _sum: { views: true },
+    });
+    const totalViews = monthlyViews._sum.views || 0;
+    if (totalViews >= 20000) {
+      return liquid("", { status: 200 });
+    }
+  }
+  if (canSchedule && !isWithinSchedule(banner.scheduledStartAt, banner.scheduledEndAt)) {
+    return liquid("", { status: 200 });
+  }
+
+  const items = banner.bannerItems.filter((item) =>
+    canSchedule ? isWithinSchedule(item.scheduledStartAt, item.scheduledEndAt) : true
+  );
   const selectedItem =
     items.find((item) => item.isSelected) || items[0] || null;
 
@@ -76,9 +120,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     TITLE_SIZE_MAP[banner.titleFontSize || "lg"] || TITLE_SIZE_MAP.lg;
   const descriptionSize =
     DESCRIPTION_SIZE_MAP[banner.descriptionFontSize || "md"] || DESCRIPTION_SIZE_MAP.md;
+  const countdownSize =
+    COUNTDOWN_SIZE_MAP[banner.countdownFontSize || "md"] || COUNTDOWN_SIZE_MAP.md;
   const bannerStyleVars = [
     `--bainners-title-size:${titleSize}`,
     `--bainners-desc-size:${descriptionSize}`,
+    `--bainners-countdown-size:${countdownSize}`,
     banner.bannerBackgroundColor
       ? `--bainners-banner-bg:${banner.bannerBackgroundColor}`
       : "",
@@ -96,6 +143,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
     banner.announcementCloseColor
       ? `--bainners-announcement-close-color:${banner.announcementCloseColor}`
       : "",
+    banner.announcementCouponTextColor
+      ? `--bainners-announcement-coupon-color:${banner.announcementCouponTextColor}`
+      : "",
+    banner.announcementCouponBorderColor
+      ? `--bainners-announcement-coupon-border:${banner.announcementCouponBorderColor}`
+      : "",
+    banner.announcementCouponBackgroundColor
+      ? `--bainners-announcement-coupon-bg:${banner.announcementCouponBackgroundColor}`
+      : "",
+    banner.announcementContentSpacing !== null && banner.announcementContentSpacing !== undefined
+      ? `--bainners-announcement-gap:${banner.announcementContentSpacing}px`
+      : "",
     banner.sliderArrowColor ? `--bainners-arrow-color:${banner.sliderArrowColor}` : "",
     banner.sliderBulletColor ? `--bainners-bullet-color:${banner.sliderBulletColor}` : "",
   ]
@@ -104,6 +163,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const ctaClasses = [
     "bainners-banner-cta",
+    banner.ctaStyle === "link" ? "bainners-cta--link" : "",
+    banner.ctaUnderline ? "bainners-cta--underline" : "",
     banner.ctaBordered ? "bainners-cta--bordered" : "",
     banner.ctaRounded ? "bainners-cta--rounded" : "",
     banner.ctaShadow ? "bainners-cta--shadow" : "",
@@ -117,10 +178,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const announcementClasses = [
     "bainners-announcement",
-    banner.announcementMarquee ? "bainners-announcement--marquee" : "",
+    banner.announcementLayout !== "stacked" && banner.announcementMarquee
+      ? "bainners-announcement--marquee"
+      : "",
     banner.announcementAnimation && banner.announcementAnimation !== "none"
       ? `bainners-announcement--${banner.announcementAnimation}`
       : "",
+    banner.announcementLayout === "stacked" ? "bainners-announcement--stacked" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -150,6 +214,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const countdownEndAt = tags.countdownEndAt || "";
     const countdownTimezone = tags.countdownTimezone || "UTC";
     const countdownDurationHours = tags.countdownDurationHours || "1";
+    const countdownShowLabels = Boolean(tags.countdownShowLabels);
 
     const overlayItems = contentOrder
       .map((key) => {
@@ -171,7 +236,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
             countdownMode
           )}" data-end="${escapeHtml(countdownEndAt)}" data-tz="${escapeHtml(
             countdownTimezone
-          )}" data-duration="${escapeHtml(countdownDurationHours)}">
+          )}" data-duration="${escapeHtml(countdownDurationHours)}" data-labels="${
+            countdownShowLabels ? "1" : "0"
+          }" data-label-days="${escapeHtml(translations.days)}" data-label-hours="${escapeHtml(
+            translations.hours
+          )}" data-label-minutes="${escapeHtml(translations.minutes)}" data-label-seconds="${escapeHtml(
+            translations.seconds
+          )}">
             <span class="bainners-countdown-value">00:00:00</span>
           </div>`;
         }
@@ -278,13 +349,41 @@ export async function loader({ request }: LoaderFunctionArgs) {
           }
         </div>`
       : banner.layout === "announcement"
-      ? `<div class="${announcementClasses}">
-          <span class="bainners-announcement-text">${escapeHtml(
-            banner.announcementText || ""
-          )}</span>
-          ${
-            banner.announcementShowCountdown
-              ? `<div class="${countdownClass}" data-mode="${escapeHtml(
+      ? (() => {
+          const announcementOrder = Array.isArray(banner.announcementContentOrder)
+            ? banner.announcementContentOrder
+            : ["text", "cta", "countdown"];
+          const showAnnouncementText = banner.announcementShowText !== false;
+          const showAnnouncementCta = banner.announcementShowCta !== false;
+          const useMarquee =
+            banner.announcementLayout !== "stacked" && banner.announcementMarquee;
+          const baseAnnouncementText = escapeHtml(banner.announcementText || "");
+          const repeatedAnnouncementText = baseAnnouncementText
+            ? Array(12).fill(baseAnnouncementText).join("&nbsp;&nbsp;&nbsp;&nbsp;")
+            : "";
+          const announcementParts = announcementOrder
+            .map((key) => {
+              if (key === "text" && showAnnouncementText && banner.announcementText) {
+                return useMarquee
+                  ? `<span class="bainners-announcement-text bainners-announcement-text--marquee"><span class="bainners-marquee-track"><span class="bainners-marquee-group">${repeatedAnnouncementText}</span><span class="bainners-marquee-group">${repeatedAnnouncementText}</span></span></span>`
+                  : `<span class="bainners-announcement-text">${baseAnnouncementText}</span>`;
+              }
+              if (key === "cta" && showAnnouncementCta && banner.announcementCtaText) {
+                return `<a class="${ctaClasses}" href="${escapeHtml(
+                  banner.announcementCtaUrl || "#"
+                )}" target="${escapeHtml(
+                  banner.announcementCtaTarget || "_self"
+                )}" rel="${
+                  banner.announcementCtaTarget === "_blank" ? "noopener noreferrer" : ""
+                }">${escapeHtml(banner.announcementCtaText)}</a>`;
+              }
+              if (key === "coupon" && banner.announcementShowCoupon && banner.announcementCouponCode) {
+                return `<button type="button" class="bainners-announcement-coupon" data-coupon="${escapeHtml(
+                  banner.announcementCouponCode
+                )}">${escapeHtml(banner.announcementCouponCode)}</button>`;
+              }
+              if (key === "countdown" && banner.announcementShowCountdown) {
+                return `<div class="${countdownClass}" data-mode="${escapeHtml(
                   banner.announcementCountdownMode || "fixed"
                 )}" data-end="${escapeHtml(
                   banner.announcementCountdownEndAt
@@ -294,35 +393,49 @@ export async function loader({ request }: LoaderFunctionArgs) {
                   banner.announcementCountdownTimezone || "UTC"
                 )}" data-duration="${escapeHtml(
                   banner.announcementCountdownDurationHours || "1"
-                )}">
+                )}" data-labels="${banner.announcementCountdownShowLabels ? "1" : "0"}" data-label-days="${escapeHtml(
+                  translations.days
+                )}" data-label-hours="${escapeHtml(translations.hours)}" data-label-minutes="${escapeHtml(
+                  translations.minutes
+                )}" data-label-seconds="${escapeHtml(translations.seconds)}">
                   <span class="bainners-countdown-value">00:00:00</span>
-                </div>`
-              : ""
-          }
-          ${
-            banner.announcementCtaText
-              ? `<a class="${ctaClasses}" href="${escapeHtml(
-                  banner.announcementCtaUrl || "#"
-                )}" target="${escapeHtml(
-                  banner.announcementCtaTarget || "_self"
-                )}" rel="${
-                  banner.announcementCtaTarget === "_blank" ? "noopener noreferrer" : ""
-                }">${escapeHtml(banner.announcementCtaText)}</a>`
-              : ""
-          }
-          ${
-            banner.announcementClosable
-              ? `<button class="bainners-announcement-close" type="button" aria-label="Close banner">×</button>`
-              : ""
-          }
-        </div>`
+                </div>`;
+              }
+              return "";
+            })
+            .filter(Boolean)
+            ;
+          const separator =
+            banner.announcementLayout !== "stacked" &&
+            !banner.announcementMarquee &&
+            banner.announcementSeparatorEnabled
+              ? `<span class="bainners-announcement-separator">${escapeHtml(
+                  banner.announcementSeparatorText || "|"
+                )}</span>`
+              : "";
+          const announcementHtml = separator
+            ? announcementParts.join(separator)
+            : announcementParts.join("");
+
+          return `<div class="${announcementClasses}">
+              ${announcementHtml}
+              ${
+                banner.announcementClosable
+                  ? `<button class="bainners-announcement-close" type="button" aria-label="Close banner">×</button>`
+                  : ""
+              }
+            </div>`;
+        })()
       : renderItem(selectedItem);
 
   const html = `
     <div class="bainners-banner bainners-banner--${escapeHtml(
       banner.layout
-    )}" data-banner-id="${escapeHtml(banner.id)}" style="${escapeHtml(bannerStyleVars)}">
+    )}" data-banner-id="${escapeHtml(banner.id)}" data-coupon-toast="${escapeHtml(
+      translations.couponCopied
+    )}" style="${escapeHtml(bannerStyleVars)}">
       ${content}
+      <div class="bainners-toast" role="status" aria-live="polite"></div>
     </div>
     <style>
       .bainners-banner { position: relative; width: 100%; background: var(--bainners-banner-bg, transparent); }
@@ -372,13 +485,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
         justify-content: center;
         width: fit-content;
         padding: 10px 18px;
-        border-radius: 12px;
+        border-radius: 6px;
         background: var(--bainners-cta-bg, #ffffff);
         color: var(--bainners-cta-color, #000000);
         border: 1px solid var(--bainners-cta-border, transparent);
         text-decoration: none;
         font-weight: 600;
       }
+      .bainners-cta--link {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        box-shadow: none;
+      }
+      .bainners-cta--underline { text-decoration: underline; }
       .bainners-cta--bordered { border-color: var(--bainners-cta-border, currentColor); }
       .bainners-cta--rounded { border-radius: 999px; }
       .bainners-cta--shadow { box-shadow: 0 8px 20px rgba(0,0,0,0.25); }
@@ -398,18 +518,63 @@ export async function loader({ request }: LoaderFunctionArgs) {
       .bainners-video { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; }
       .bainners-video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; display: block; }
       .bainners-video-blocker { position: absolute; inset: 0; background: rgba(0,0,0,0); z-index: 2; }
-      .bainners-announcement { position: relative; display: flex; align-items: center; gap: 16px; padding: 16px 48px 16px 24px; background: var(--bainners-banner-bg, #f6f6f7); color: var(--bainners-title-color, #111111); flex-wrap: wrap; }
-      .bainners-announcement-text { font-weight: 600; }
-      .bainners-announcement--marquee { overflow: hidden; }
-      .bainners-announcement--marquee .bainners-announcement-text { display: inline-block; white-space: nowrap; animation: bainners-marquee 12s linear infinite; }
+      .bainners-announcement { position: relative; display: flex; align-items: center; justify-content: center; text-align: center; gap: var(--bainners-announcement-gap, 16px); padding: 16px 48px 16px 24px; background: var(--bainners-banner-bg, #f6f6f7); color: var(--bainners-title-color, #111111); flex-wrap: wrap; }
+      .bainners-announcement--stacked { flex-direction: column; align-items: center; text-align: center; }
+      .bainners-announcement-text { font-weight: 600; font-size: var(--bainners-title-size, 16px); }
+      .bainners-announcement--marquee { display: grid; grid-template-columns: 1fr auto auto; align-items: center; column-gap: var(--bainners-announcement-gap, 16px); }
+      .bainners-announcement-text--marquee { overflow: hidden; white-space: nowrap; }
+      .bainners-marquee-track {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        width: max-content;
+        animation: bainners-marquee 4s linear infinite;
+        will-change: transform;
+        transform: translate3d(0,0,0);
+      }
+      .bainners-marquee-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 36px;
+        padding-right: 36px;
+        flex: 0 0 auto;
+      }
+      .bainners-announcement-separator { opacity: 0.6; font-weight: 600; }
+      .bainners-announcement-coupon {
+        border: 1px dashed var(--bainners-announcement-coupon-border, currentColor);
+        color: var(--bainners-announcement-coupon-color, currentColor);
+        background: var(--bainners-announcement-coupon-bg, transparent);
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .bainners-toast {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        background: #111111;
+        color: #ffffff;
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-size: 12px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(6px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 3;
+      }
+      .bainners-toast.bainners-toast--visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
       .bainners-announcement--shake { animation: bainners-shake 1s ease-in-out 1; }
       .bainners-announcement--pulse { animation: bainners-pulse 2.2s ease-in-out 1; }
       .bainners-announcement--bounce { animation: bainners-bounce 2s ease-in-out 1; }
       .bainners-announcement-close {
         position: absolute;
         right: 12px;
-        top: 50%;
-        transform: translateY(-50%);
+        top: 12px;
         border: 0;
         background: transparent;
         color: var(--bainners-announcement-close-color, #111111);
@@ -422,12 +587,37 @@ export async function loader({ request }: LoaderFunctionArgs) {
         background: var(--bainners-countdown-bg, #fef3c7);
         padding: 6px 10px;
         border-radius: 8px;
+        font-size: var(--bainners-countdown-size, 14px);
       }
       .bainners-countdown--outline { background: transparent; border: 1px solid var(--bainners-countdown-color, #111111); }
       .bainners-countdown--pill { border-radius: 999px; }
+      .bainners-countdown--text { background: transparent; padding: 0; }
+      .bainners-countdown--segments {
+        background: transparent;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .bainners-countdown-segment {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        background: var(--bainners-countdown-bg, #fef3c7);
+        color: var(--bainners-countdown-color, #111111);
+        padding: 4px 8px;
+        border-radius: 6px;
+      }
+      .bainners-countdown--segments .bainners-countdown-separator {
+        color: var(--bainners-countdown-color, #111111);
+        font-weight: 600;
+        margin: 0 4px;
+      }
+      .bainners-countdown-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; }
       @keyframes bainners-marquee {
-        0% { transform: translateX(100%); }
-        100% { transform: translateX(-100%); }
+        0% { transform: translate3d(0,0,0); }
+        100% { transform: translate3d(-50%,0,0); }
       }
       @keyframes bainners-shake {
         0%, 100% { transform: translateX(0); }
@@ -449,21 +639,92 @@ export async function loader({ request }: LoaderFunctionArgs) {
           var mode = el.getAttribute("data-mode") || "fixed";
           var endRaw = el.getAttribute("data-end") || "";
           var duration = parseFloat(el.getAttribute("data-duration") || "1");
+          var showLabels = el.getAttribute("data-labels") === "1";
+          var labelDays = el.getAttribute("data-label-days") || "Days";
+          var labelHours = el.getAttribute("data-label-hours") || "Hours";
+          var labelMinutes = el.getAttribute("data-label-minutes") || "Minutes";
+          var labelSeconds = el.getAttribute("data-label-seconds") || "Seconds";
           var endTime = null;
           if (mode === "evergreen") {
-            endTime = Date.now() + duration * 60 * 60 * 1000;
+            var stored = el.getAttribute("data-evergreen-end");
+            if (stored) {
+              endTime = parseInt(stored, 10);
+            } else {
+              endTime = Date.now() + duration * 60 * 60 * 1000;
+              el.setAttribute("data-evergreen-end", String(endTime));
+            }
           } else {
             endTime = Date.parse(endRaw);
+            if (!endTime || isNaN(endTime)) {
+              var match = String(endRaw).match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+              if (match) {
+                endTime = new Date(
+                  Number(match[1]),
+                  Number(match[2]) - 1,
+                  Number(match[3]),
+                  Number(match[4]),
+                  Number(match[5])
+                ).getTime();
+              }
+            }
           }
           if (!endTime || isNaN(endTime)) return;
           var diff = endTime - Date.now();
           if (diff < 0) diff = 0;
-          var hours = Math.floor(diff / 3600000);
+          var target = el.querySelector(".bainners-countdown-value");
+          if (!target) return;
+          var days = Math.floor(diff / 86400000);
+          var hours = Math.floor((diff % 86400000) / 3600000);
           var minutes = Math.floor((diff % 3600000) / 60000);
           var seconds = Math.floor((diff % 60000) / 1000);
-          var value = String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
-          var target = el.querySelector(".bainners-countdown-value");
-          if (target) target.textContent = value;
+          var pad = function (num) { return String(num).padStart(2, "0"); };
+          var isSegments = el.classList.contains("bainners-countdown--segments");
+          if (isSegments) {
+            var segments = [];
+            if (days > 0) {
+              segments.push(
+                '<span class="bainners-countdown-segment"><span class="bainners-countdown-number">' +
+                  days +
+                  '</span>' +
+                  (showLabels ? '<span class="bainners-countdown-label">' + labelDays + '</span>' : "") +
+                  "</span>"
+              );
+            }
+            segments.push(
+              '<span class="bainners-countdown-segment"><span class="bainners-countdown-number">' +
+                pad(hours) +
+                '</span>' +
+                (showLabels ? '<span class="bainners-countdown-label">' + labelHours + '</span>' : "") +
+                "</span>"
+            );
+            segments.push(
+              '<span class="bainners-countdown-segment"><span class="bainners-countdown-number">' +
+                pad(minutes) +
+                '</span>' +
+                (showLabels ? '<span class="bainners-countdown-label">' + labelMinutes + '</span>' : "") +
+                "</span>"
+            );
+            segments.push(
+              '<span class="bainners-countdown-segment"><span class="bainners-countdown-number">' +
+                pad(seconds) +
+                '</span>' +
+                (showLabels ? '<span class="bainners-countdown-label">' + labelSeconds + '</span>' : "") +
+                "</span>"
+            );
+            target.innerHTML = segments.join('<span class="bainners-countdown-separator">:</span>');
+            return;
+          }
+          var value = "";
+          if (showLabels) {
+            value =
+              (days > 0 ? days + " " + labelDays + " " : "") +
+              pad(hours) + " " + labelHours + " " +
+              pad(minutes) + " " + labelMinutes + " " +
+              pad(seconds) + " " + labelSeconds;
+          } else {
+            value = (days > 0 ? String(days).padStart(2, "0") + ":" : "") + pad(hours) + ":" + pad(minutes) + ":" + pad(seconds);
+          }
+          target.textContent = value;
         }
         function tick() {
           document.querySelectorAll(".bainners-countdown").forEach(updateCountdown);
@@ -474,6 +735,43 @@ export async function loader({ request }: LoaderFunctionArgs) {
           button.addEventListener("click", function () {
             var banner = button.closest(".bainners-banner");
             if (banner) banner.style.display = "none";
+          });
+        });
+
+        document.querySelectorAll(".bainners-announcement-coupon").forEach(function (button) {
+          button.addEventListener("click", function () {
+            var code = button.getAttribute("data-coupon") || "";
+            if (!code) return;
+            var root = button.closest(".bainners-banner");
+            var toast = root ? root.querySelector(".bainners-toast") : null;
+              var toastMessage =
+                (root && root.getAttribute("data-coupon-toast")) || "Coupon copied";
+              function showToast() {
+                if (!toast) return;
+                toast.textContent = toastMessage;
+                toast.classList.add("bainners-toast--visible");
+                clearTimeout(toast._bainnersToastTimer);
+                toast._bainnersToastTimer = setTimeout(function () {
+                  toast.classList.remove("bainners-toast--visible");
+                }, 2000);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(code).then(showToast).catch(showToast);
+            } else {
+              try {
+                var textarea = document.createElement("textarea");
+                textarea.value = code;
+                textarea.style.position = "fixed";
+                textarea.style.opacity = "0";
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textarea);
+                showToast();
+              } catch (e) {
+                showToast();
+              }
+            }
           });
         });
 

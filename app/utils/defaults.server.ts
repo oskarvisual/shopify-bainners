@@ -1,0 +1,16 @@
+export const DEFAULT_SHOP_DEFAULTS = {
+  defaultBannerBackgroundColor: "#f2f2f2",
+  defaultTitleColor: "#000000",
+  defaultDescriptionColor: "#000000",
+  defaultCtaTextColor: "#ffffff",
+  defaultCtaBackgroundColor: "#000000",
+  defaultCtaBorderColor: "#000000",
+  defaultCountdownTextColor: "#000000",
+  defaultCountdownBackgroundColor: "#ffffff",
+  defaultSliderArrowColor: "#000000",
+  defaultSliderBulletColor: "#000000",
+  defaultAnnouncementCloseColor: "#000000",
+  defaultAnnouncementCouponTextColor: "#ff0000",
+  defaultAnnouncementCouponBorderColor: "#ff0000",
+  defaultAnnouncementCouponBackgroundColor: "",
+};

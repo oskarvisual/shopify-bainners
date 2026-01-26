@@ -57,9 +57,13 @@ model Shop {
   defaultCtaBordered Boolean @default(false)
   defaultCtaRounded Boolean @default(true)
   defaultCtaShadow Boolean @default(false)
+  defaultCtaStyle String? @db.VarChar(20)
+  defaultCtaUnderline Boolean @default(false)
   defaultCountdownTextColor String? @db.VarChar(20)
   defaultCountdownBackgroundColor String? @db.VarChar(20)
   defaultCountdownStyle String? @db.VarChar(20)
+  defaultCountdownFontSize String? @db.VarChar(20)
+  defaultCountdownTimezone String? @db.VarChar(64)
   defaultSliderArrowStyle String? @db.VarChar(20)
   defaultSliderArrowColor String? @db.VarChar(20)
   defaultSliderBulletColor String? @db.VarChar(20)
@@ -67,6 +71,19 @@ model Shop {
   defaultAnnouncementAnimation String? @db.VarChar(20)
   defaultAnnouncementCloseColor String? @db.VarChar(20)
   defaultAnnouncementClosable Boolean @default(false)
+  defaultAnnouncementLayout String? @db.VarChar(20)
+  defaultAnnouncementContentSpacing Int?
+  defaultAnnouncementShowText Boolean @default(true)
+  defaultAnnouncementShowCta Boolean @default(true)
+  defaultAnnouncementShowCoupon Boolean @default(false)
+  defaultAnnouncementCouponTextColor String? @db.VarChar(20)
+  defaultAnnouncementCouponBorderColor String? @db.VarChar(20)
+  defaultAnnouncementCouponBackgroundColor String? @db.VarChar(20)
+  defaultTranslationCouponCopied String? @db.VarChar(100)
+  defaultTranslationDays String? @db.VarChar(30)
+  defaultTranslationHours String? @db.VarChar(30)
+  defaultTranslationMinutes String? @db.VarChar(30)
+  defaultTranslationSeconds String? @db.VarChar(30)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -119,11 +136,24 @@ model Banner {
   announcementCloseColor String? @db.VarChar(20)
   announcementMarquee Boolean   @default(false)
   announcementAnimation String? @db.VarChar(20)
+  announcementSeparatorEnabled Boolean @default(false)
+  announcementSeparatorText String? @db.VarChar(10)
   announcementShowCountdown Boolean @default(false)
   announcementCountdownMode String? @db.VarChar(50)
   announcementCountdownEndAt DateTime?
   announcementCountdownTimezone String? @db.VarChar(64)
   announcementCountdownDurationHours String? @db.VarChar(20)
+  announcementCountdownShowLabels Boolean @default(false)
+  announcementShowCoupon Boolean @default(false)
+  announcementCouponCode String? @db.VarChar(100)
+  announcementCouponTextColor String? @db.VarChar(20)
+  announcementCouponBorderColor String? @db.VarChar(20)
+  announcementCouponBackgroundColor String? @db.VarChar(20)
+  announcementShowText Boolean @default(true)
+  announcementShowCta Boolean @default(true)
+  announcementContentOrder Json?
+  announcementLayout String? @db.VarChar(20)
+  announcementContentSpacing Int?
   bannerBackgroundColor String? @db.VarChar(20)
   titleFontSize       String?   @db.VarChar(20)
   descriptionFontSize String?   @db.VarChar(20)
@@ -135,9 +165,11 @@ model Banner {
   ctaBordered         Boolean   @default(false)
   ctaRounded          Boolean   @default(true)
   ctaShadow           Boolean   @default(false)
+  ctaUnderline        Boolean   @default(false)
   countdownTextColor  String?   @db.VarChar(20)
   countdownBackgroundColor String? @db.VarChar(20)
   countdownStyle      String?   @db.VarChar(20)
+  countdownFontSize   String?   @db.VarChar(20)
   customCss           String?   @db.Text
 
   // CTA configuration
@@ -193,6 +225,8 @@ model BannerItem {
   title             String?  @db.VarChar(255)
   description       String?  @db.Text
   displayOrder      Int      @default(0)
+  scheduledStartAt  DateTime?
+  scheduledEndAt    DateTime?
 
   // Selection/variant info
   isSelected        Boolean  @default(false)

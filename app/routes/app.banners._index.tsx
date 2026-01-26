@@ -7,13 +7,15 @@ import {
   useSearchParams,
   useLocation,
 } from "@remix-run/react";
-import { Page, Layout, Card, EmptyState, Button, Badge, Icon, Select, InlineStack } from "@shopify/polaris";
+import { Page, Layout, Card, EmptyState, Button, Badge, Icon, Select, InlineStack, BlockStack } from "@shopify/polaris";
 import { useState } from "react";
 import { PlusIcon, ImageIcon, MegaphoneIcon, PlayCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { getPlanStorageLimitGB } from "../utils/storage.server";
 import { BannerCreateModal } from "../components/BannerCreateModal";
+import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
+import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
 
 const METAOBJECT_TYPE = "bainners_banner";
 
@@ -247,6 +249,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         shopDomain: shop,
         plan: "free",
         storageLimitGB: getPlanStorageLimitGB("free"),
+        ...DEFAULT_SHOP_DEFAULTS,
       },
       include: {
         banners: {
@@ -288,6 +291,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
       status: banner.status,
       layout: banner.layout,
       imageCount: banner.bannerItems.length,
+      scheduledStartAt: banner.scheduledStartAt
+        ? banner.scheduledStartAt.toISOString()
+        : "",
+      scheduledEndAt: banner.scheduledEndAt ? banner.scheduledEndAt.toISOString() : "",
       image: thumbnailUrl
         ? {
             url: thumbnailUrl,
@@ -310,6 +317,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     shop: shopRecord.shopDomain,
     banners,
     sortBy,
+    plan: shopRecord.plan || "free",
   });
 }
 
@@ -352,7 +360,7 @@ export async function action({ request }: LoaderFunctionArgs) {
 }
 
 export default function BannersIndex() {
-  const { banners, sortBy } = useLoaderData<typeof loader>();
+  const { banners, sortBy, plan } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -388,6 +396,14 @@ export default function BannersIndex() {
       archived: "warning",
     };
     return <Badge tone={statusMap[status] || "info"}>{status}</Badge>;
+  };
+  const nowTimestamp = Date.now();
+  const isWithinSchedule = (start?: string, end?: string) => {
+    const startTime = start ? new Date(start).getTime() : null;
+    const endTime = end ? new Date(end).getTime() : null;
+    if (startTime && nowTimestamp < startTime) return false;
+    if (endTime && nowTimestamp > endTime) return false;
+    return true;
   };
 
   return (
@@ -504,12 +520,21 @@ export default function BannersIndex() {
                           )}
                         </td>
                         <td style={{ padding: "12px" }}>
-                          <Link
-                            to={`/app/banners/${banner.id}/edit${editSearch}`}
-                            className="bainners-link-title"
-                          >
-                            {banner.title}
-                          </Link>
+                          <BlockStack gap="100" inlineAlign="start">
+                            <Link
+                              to={`/app/banners/${banner.id}/edit${editSearch}`}
+                              className="bainners-link-title"
+                            >
+                              {banner.title}
+                            </Link>
+                            {banner.status === "active" &&
+                            !isWithinSchedule(
+                              banner.scheduledStartAt,
+                              banner.scheduledEndAt
+                            ) ? (
+                              <Badge tone="critical">Scheduled (hidden)</Badge>
+                            ) : null}
+                          </BlockStack>
                         </td>
                         <td style={{ padding: "12px" }}>{getStatusBadge(banner.status)}</td>
                         <td style={{ padding: "12px" }}>
@@ -542,6 +567,7 @@ export default function BannersIndex() {
         onClose={() => setIsCreateOpen(false)}
         actionUrl={createBannerAction}
         submitWithFetcher
+        plan={plan}
       />
     </Page>
   );
