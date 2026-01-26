@@ -30,6 +30,8 @@ export default function App() {
         </Link>
         <Link to="/app/banners">Banners</Link>
         <Link to="/app/images">Image Gallery</Link>
+        <Link to="/app/analytics">Analytics</Link>
+        <Link to="/app/settings">Settings</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

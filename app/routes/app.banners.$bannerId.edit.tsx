@@ -86,6 +86,10 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
           definition: {
             name: "Bainners Banner",
             type: METAOBJECT_TYPE,
+            displayNameKey: "title",
+            access: {
+              storefront: "PUBLIC_READ",
+            },
             fieldDefinitions: [
               {
                 name: "Banner ID",
@@ -105,6 +109,12 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
                 type: "single_line_text_field",
                 required: false,
               },
+              {
+                name: "Thumbnail",
+                key: "thumbnail",
+                type: "single_line_text_field",
+                required: false,
+              },
             ],
           },
         },
@@ -119,79 +129,76 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
   }
 }
 
-async function syncBannerMetaobject(admin: any, banner: any) {
+async function syncAllBannerMetaobjects(admin: any, shopId: string) {
   if (!admin) return;
+
   await ensureBannerMetaobjectDefinition(admin);
-  const query = `banner_id:${banner.id}`;
-  let existingId: string | null = null;
+
+  // 1. Delete ALL existing metaobjects
   try {
-    const lookup = await admin.graphql(
-      `
-      query FindMetaobject($type: String!, $query: String!) {
-        metaobjects(first: 1, type: $type, query: $query) {
-          nodes {
-            id
-          }
-        }
-      }
-      `,
-      { variables: { type: METAOBJECT_TYPE, query } }
+    const allMetaResponse = await admin.graphql(
+      `query { metaobjects(first: 250, type: "${METAOBJECT_TYPE}") { nodes { id } } }`
     );
-    const json = await lookup.json();
-    existingId = json?.data?.metaobjects?.nodes?.[0]?.id || null;
+    const allMetaJson = await allMetaResponse.json();
+    const existingMetaobjects = allMetaJson?.data?.metaobjects?.nodes || [];
+
+    for (const meta of existingMetaobjects) {
+      await admin.graphql(
+        `mutation { metaobjectDelete(id: "${meta.id}") { deletedId } }`
+      );
+    }
   } catch (error) {
-    console.warn("Failed to lookup metaobject", error);
+    console.error("[syncAllBannerMetaobjects] Failed to delete existing metaobjects:", error);
   }
 
-  if (banner.status !== "active") {
-    if (existingId) {
-      try {
-        await admin.graphql(
-          `
-          mutation DeleteMetaobject($id: ID!) {
-            metaobjectDelete(id: $id) {
-              deletedId
-              userErrors {
-                message
-              }
-            }
-          }
-          `,
-          { variables: { id: existingId } }
-        );
-      } catch (error) {
-        console.warn("Failed to delete metaobject", error);
+  // 2. Get all active banners
+  const activeBanners = await db.banner.findMany({
+    where: { shopId, status: "active" },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      bannerItems: {
+        orderBy: { displayOrder: "asc" },
+        take: 1,
+        select: {
+          image: { select: { storageUrl: true } },
+          externalImageUrl: true,
+          tags: true,
+        },
+      },
+    },
+  });
+
+  // 3. Create metaobjects for all active banners
+  for (const banner of activeBanners) {
+    const firstItem = banner.bannerItems[0];
+    let thumbnail = "";
+
+    if (firstItem) {
+      const itemTags = (firstItem.tags as Record<string, any> | null) || {};
+      if (itemTags.mediaType === "video") {
+        const provider = itemTags.videoProvider;
+        const videoId = itemTags.videoId;
+        if (provider === "youtube" && videoId) {
+          thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        } else if (provider === "vimeo" && videoId) {
+          thumbnail = `https://vumbnail.com/${videoId}.jpg`;
+        }
+      } else {
+        thumbnail = firstItem.image?.storageUrl || firstItem.externalImageUrl || "";
       }
     }
-    return;
-  }
 
-  const fields = [
-    { key: "banner_id", value: banner.id },
-    { key: "title", value: banner.title },
-    { key: "status", value: banner.status },
-  ];
+    const fields = [
+      { key: "banner_id", value: banner.id },
+      { key: "title", value: banner.title },
+      { key: "status", value: banner.status },
+      { key: "thumbnail", value: thumbnail },
+    ];
 
-  try {
-    if (existingId) {
-      await admin.graphql(
-        `
-        mutation UpdateMetaobject($id: ID!, $metaobject: MetaobjectUpdateInput!) {
-          metaobjectUpdate(id: $id, metaobject: $metaobject) {
-            metaobject {
-              id
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-        `,
-        { variables: { id: existingId, metaobject: { fields } } }
-      );
-    } else {
-      await admin.graphql(
+    try {
+      const createResponse = await admin.graphql(
         `
         mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
           metaobjectCreate(metaobject: $metaobject) {
@@ -215,9 +222,13 @@ async function syncBannerMetaobject(admin: any, banner: any) {
           },
         }
       );
+      const createJson = await createResponse.json();
+      if (createJson?.data?.metaobjectCreate?.userErrors?.length > 0) {
+        console.error("[syncAllBannerMetaobjects] Create error for", banner.title, ":", createJson.data.metaobjectCreate.userErrors);
+      }
+    } catch (error) {
+      console.error("[syncAllBannerMetaobjects] Failed to create metaobject for", banner.title, ":", error);
     }
-  } catch (error) {
-    console.warn("Failed to upsert metaobject", error);
   }
 }
 
@@ -265,11 +276,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Error("Banner not found");
   }
 
-  await ensureBannerMetaobjectDefinition(admin);
-  if (banner.status === "active") {
-    await syncBannerMetaobject(admin, banner);
-  }
-
   const analytics = await db.bannerAnalytic.aggregate({
     where: { bannerId: banner.id },
     _sum: { views: true, clicks: true },
@@ -288,122 +294,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const appImagesNextCursor =
     appImages.length === APP_GALLERY_PAGE_SIZE ? appImages[appImages.length - 1].id : null;
-
-  let shopifyProducts: Array<{
-    id: string;
-    title: string;
-    handle?: string;
-    status?: string;
-    featuredImage?: { url: string; altText?: string };
-    images: Array<{ id: string; url: string; width: number; height: number }>;
-  }> = [];
-  let productLoadError: string | null = null;
-  let shopifyFiles: Array<{
-    id: string;
-    url: string;
-    width: number;
-    height: number;
-    filename: string;
-  }> = [];
-
-  try {
-    const productsResponse = await admin.graphql(
-      `
-        query getProducts($first: Int!) {
-          products(first: $first) {
-            nodes {
-              id
-              title
-              handle
-              status
-              featuredImage {
-                url
-                altText
-              }
-              images(first: 20) {
-                nodes {
-                  id
-                  url
-                  width
-                  height
-                }
-              }
-            }
-          }
-        }
-      `,
-      { variables: { first: 50 } }
-    );
-
-    const { data } = await productsResponse.json();
-    shopifyProducts =
-      data?.products?.nodes?.map((product: any) => ({
-        id: product.id,
-        title: product.title,
-        handle: product.handle,
-        status: product.status,
-        featuredImage: product.featuredImage || undefined,
-        images:
-          product.images?.nodes?.map((image: any) => ({
-            id: image.id,
-            url: image.url,
-            width: image.width || 1920,
-            height: image.height || 1080,
-          })) || [],
-      })) || [];
-  } catch (error) {
-    productLoadError = error instanceof Error ? error.message : "Failed to load Shopify products";
-    console.warn("Failed to load Shopify products", error);
-  }
-
-  try {
-    const filesResponse = await admin.graphql(
-      `
-        query getFiles($first: Int!) {
-          files(first: $first) {
-            nodes {
-              id
-              alt
-              fileStatus
-              ... on MediaImage {
-                image {
-                  url
-                  width
-                  height
-                }
-              }
-              preview {
-                image {
-                  url
-                  width
-                  height
-                }
-              }
-            }
-          }
-        }
-      `,
-      { variables: { first: 50 } }
-    );
-
-    const { data } = await filesResponse.json();
-    shopifyFiles =
-      data?.files?.nodes
-        ?.map((file: any) => {
-          const url = file?.image?.url || file?.preview?.image?.url || "";
-          if (!url) return null;
-          return {
-            id: file.id,
-            url,
-            width: file?.image?.width || file?.preview?.image?.width || 1920,
-            height: file?.image?.height || file?.preview?.image?.height || 1080,
-            filename: file?.alt || "Shopify file",
-          };
-        })
-        .filter(Boolean) || [];
-  } catch (error) {
-    console.warn("Failed to load Shopify files", error);
-  }
 
   const storageUsedMB = await getStorageUsageMB(shopRecord.id);
 
@@ -434,6 +324,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       announcementText: banner.announcementText || "",
       announcementCtaText: banner.announcementCtaText || "",
       announcementCtaUrl: banner.announcementCtaUrl || "",
+      announcementCtaTarget: banner.announcementCtaTarget || "_self",
       announcementClosable: banner.announcementClosable ?? false,
       announcementCloseColor: banner.announcementCloseColor || "",
       announcementMarquee: banner.announcementMarquee ?? false,
@@ -497,10 +388,17 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       createdAt: image.createdAt.toISOString(),
     })),
     appImagesNextCursor,
-    shopifyProducts,
-    shopifyFiles,
-    productLoadError,
+    shopifyProducts: [],
+    shopifyFiles: [],
+    productLoadError: null,
   });
+}
+
+export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: any) {
+  if (actionResult && typeof actionResult === "object" && actionResult.skipRevalidate) {
+    return false;
+  }
+  return defaultShouldRevalidate;
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -526,6 +424,130 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (!shopRecord) {
     return json({ success: false, error: "Shop not found" }, { status: 404 });
+  }
+
+  if (action === "load-shopify-products") {
+    let shopifyProducts: Array<{
+      id: string;
+      title: string;
+      handle?: string;
+      status?: string;
+      featuredImage?: { url: string; altText?: string };
+      images: Array<{ id: string; url: string; width: number; height: number }>;
+    }> = [];
+    let productLoadError: string | null = null;
+    try {
+      const productsResponse = await admin.graphql(
+        `
+          query getProducts($first: Int!) {
+            products(first: $first) {
+              nodes {
+                id
+                title
+                handle
+                status
+                featuredImage {
+                  url
+                  altText
+                }
+                images(first: 20) {
+                  nodes {
+                    id
+                    url
+                    width
+                    height
+                  }
+                }
+              }
+            }
+          }
+        `,
+        { variables: { first: 50 } }
+      );
+
+      const { data } = await productsResponse.json();
+      shopifyProducts =
+        data?.products?.nodes?.map((product: any) => ({
+          id: product.id,
+          title: product.title,
+          handle: product.handle,
+          status: product.status,
+          featuredImage: product.featuredImage || undefined,
+          images:
+            product.images?.nodes?.map((image: any) => ({
+              id: image.id,
+              url: image.url,
+              width: image.width || 1920,
+              height: image.height || 1080,
+            })) || [],
+        })) || [];
+    } catch (error) {
+      productLoadError =
+        error instanceof Error ? error.message : "Failed to load Shopify products";
+      console.warn("Failed to load Shopify products", error);
+    }
+
+    return json({ success: true, shopifyProducts, productLoadError, skipRevalidate: true });
+  }
+
+  if (action === "load-shopify-files") {
+    let shopifyFiles: Array<{
+      id: string;
+      url: string;
+      width: number;
+      height: number;
+      filename: string;
+    }> = [];
+    try {
+      const filesResponse = await admin.graphql(
+        `
+          query getFiles($first: Int!) {
+            files(first: $first) {
+              nodes {
+                id
+                alt
+                fileStatus
+                ... on MediaImage {
+                  image {
+                    url
+                    width
+                    height
+                  }
+                }
+                preview {
+                  image {
+                    url
+                    width
+                    height
+                  }
+                }
+              }
+            }
+          }
+        `,
+        { variables: { first: 50 } }
+      );
+
+      const { data } = await filesResponse.json();
+      shopifyFiles =
+        data?.files?.nodes
+          ?.map((file: any) => {
+            const url = file?.image?.url || file?.preview?.image?.url || "";
+            if (!url) return null;
+            return {
+              id: file.id,
+              url,
+              width: file?.image?.width || file?.preview?.image?.width || 1920,
+              height: file?.image?.height || file?.preview?.image?.height || 1080,
+              filename: file?.alt || "Shopify file",
+            };
+          })
+          .filter(Boolean) || [];
+    } catch (error) {
+      console.warn("Failed to load Shopify files", error);
+    }
+
+    return json({ success: true, shopifyFiles, skipRevalidate: true });
   }
 
   const banner = await db.banner.findFirst({
@@ -594,6 +616,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
         announcementCtaUrl: formData.has("announcementCtaUrl")
           ? ((formData.get("announcementCtaUrl") as string) || null)
           : banner.announcementCtaUrl,
+        announcementCtaTarget: formData.has("announcementCtaTarget")
+          ? ((formData.get("announcementCtaTarget") as string) || null)
+          : banner.announcementCtaTarget,
         announcementClosable: formData.has("announcementClosable")
           ? formData.get("announcementClosable") === "true"
           : banner.announcementClosable,
@@ -671,9 +696,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
       },
     });
 
-    await syncBannerMetaobject(admin, updatedBanner);
+    // Only sync metaobjects when status actually changes
+    if (nextStatus !== banner.status) {
+      await syncAllBannerMetaobjects(admin, shopRecord.id);
+    }
 
-    return json({ success: true });
+    return json({ success: true, skipRevalidate: true });
   }
 
   if (action === "reorder-images") {
@@ -695,7 +723,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       data: { updatedAt: new Date() },
     });
 
-    return json({ success: true });
+    return json({ success: true, skipRevalidate: true });
   }
 
   if (action === "generate-image") {
@@ -783,6 +811,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       success: true,
       taskId,
       state: "pending",
+      skipRevalidate: true,
     });
   }
 
@@ -873,7 +902,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const statusPayload = Array.isArray(result.data) ? result.data[0] : result.data;
     const n8nImage = extractN8nImage(statusPayload);
     if (!n8nImage.imageUrl) {
-      return json({ success: true, state: "waiting" });
+      return json({ success: true, state: "waiting", skipRevalidate: true });
     }
 
     const sizeInMB = parseFilesize(n8nImage.filesize || 0);
@@ -914,6 +943,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         sizeInMB: image.sizeInMB,
         filename: image.filename,
       },
+      skipRevalidate: true,
     });
   }
 
@@ -988,6 +1018,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         sizeInMB: image.sizeInMB,
         filename: image.filename,
       },
+      skipRevalidate: true,
     });
   }
 
@@ -1054,6 +1085,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           showCta: false,
           ctaText: "",
           ctaUrl: "",
+          ctaTarget: "_self",
+          ctaMode: "button",
           showCountdown: false,
           countdownMode: "fixed",
           countdownEndAt: "",
@@ -1064,7 +1097,23 @@ export async function action({ request, params }: ActionFunctionArgs) {
       },
     });
 
-    return json({ success: true, itemId: item.id });
+    return json({
+      success: true,
+      item: {
+        id: item.id,
+        title: item.title || banner.title,
+        description: item.description || banner.descriptionInternal || "",
+        imageUrl: "",
+        imageId: null,
+        externalImageUrl: null,
+        sourceType: "video",
+        sizeInMB: 0,
+        isSelected: item.isSelected,
+        tags: item.tags || {},
+        createdAt: item.createdAt.toISOString(),
+      },
+      skipRevalidate: true,
+    });
   }
 
   if (action === "attach-image") {
@@ -1092,7 +1141,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       where: { bannerId: banner.id },
     });
 
-    await db.bannerItem.create({
+    const createdItem = await db.bannerItem.create({
       data: {
         shopId: shopRecord.id,
         bannerId: banner.id,
@@ -1104,6 +1153,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         description: banner.descriptionInternal || null,
         alt: banner.title,
       },
+      include: { image: true },
     });
 
     // Update banner's updatedAt timestamp
@@ -1114,8 +1164,23 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     return json({
       success: true,
+      item: {
+        id: createdItem.id,
+        title: createdItem.title || banner.title,
+        description: createdItem.description || banner.descriptionInternal || "",
+        imageUrl: createdItem.image?.storageUrl || createdItem.externalImageUrl || "",
+        imageId: createdItem.imageId || null,
+        externalImageUrl: createdItem.externalImageUrl || null,
+        sourceType:
+          createdItem.image?.sourceType || (createdItem.externalImageUrl ? "shopify" : "unknown"),
+        sizeInMB: createdItem.image?.sizeInMB || 0,
+        isSelected: createdItem.isSelected,
+        tags: createdItem.tags || {},
+        createdAt: createdItem.createdAt.toISOString(),
+      },
       externalImageWidth,
       externalImageHeight,
+      skipRevalidate: true,
     });
   }
 
@@ -1141,7 +1206,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       });
     }
 
-    return json({ success: true });
+    return json({ success: true, removedItemId: itemId, skipRevalidate: true });
   }
 
   if (action === "update-banner-item") {
@@ -1165,7 +1230,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         where: { id: itemId, bannerId: banner.id },
         data: { tags: nextTags },
       });
-      return json({ success: true });
+      return json({ success: true, skipRevalidate: true });
     }
 
     const nextTags: Record<string, any> = { ...(existing.tags as Record<string, any> | null) };
@@ -1190,6 +1255,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
     if (formData.has("ctaUrl")) {
       nextTags.ctaUrl = (formData.get("ctaUrl") as string) || "";
     }
+    if (formData.has("ctaTarget")) {
+      nextTags.ctaTarget = (formData.get("ctaTarget") as string) || "_self";
+    }
+    if (formData.has("ctaMode")) {
+      nextTags.ctaMode = (formData.get("ctaMode") as string) || "button";
+    }
 
     await db.bannerItem.update({
       where: { id: itemId, bannerId: banner.id },
@@ -1198,7 +1269,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       },
     });
 
-    return json({ success: true });
+    return json({ success: true, skipRevalidate: true });
   }
 
   if (action === "delete-banner") {
@@ -1206,9 +1277,126 @@ export async function action({ request, params }: ActionFunctionArgs) {
       where: { id: banner.id, shopId: shopRecord.id },
     });
 
+    // Sync metaobjects after deleting banner
+    await syncAllBannerMetaobjects(admin, shopRecord.id);
+
     const redirectUrl = new URL("/app/banners", request.url);
     redirectUrl.search = url.search;
     return redirect(redirectUrl.toString());
+  }
+
+  if (action === "get-analytics") {
+    const scope = (formData.get("scope") as string) || "banner";
+    const rangeParam = formData.get("range") as string;
+    const rangeDays = Math.max(7, Math.min(90, Number(rangeParam) || 30));
+
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setUTCHours(0, 0, 0, 0);
+    startDate.setUTCDate(startDate.getUTCDate() - (rangeDays - 1));
+
+    if (scope === "item") {
+      const itemId = (formData.get("itemId") as string) || "";
+      if (!itemId) {
+        return json({ success: false, error: "Missing itemId", scope }, { status: 400 });
+      }
+
+      const item = await db.bannerItem.findFirst({
+        where: { id: itemId, bannerId: banner.id },
+        select: { id: true },
+      });
+      if (!item) {
+        return json({ success: false, error: "Item not found", scope }, { status: 404 });
+      }
+
+      const dailyTotals = await db.bannerItemAnalytic.groupBy({
+        by: ["date"],
+        where: { bannerItemId: item.id, date: { gte: startDate } },
+        _sum: { views: true, clicks: true },
+        orderBy: { date: "asc" },
+      });
+
+      const chart: Array<{ date: string; views: number; clicks: number }> = [];
+      const dailyMap = new Map(
+        dailyTotals.map((row) => [
+          row.date.toISOString().slice(0, 10),
+          { views: row._sum.views || 0, clicks: row._sum.clicks || 0 },
+        ])
+      );
+      for (let i = 0; i < rangeDays; i += 1) {
+        const day = new Date(startDate);
+        day.setUTCDate(startDate.getUTCDate() + i);
+        const key = day.toISOString().slice(0, 10);
+        const values = dailyMap.get(key) || { views: 0, clicks: 0 };
+        chart.push({ date: key, views: values.views, clicks: values.clicks });
+      }
+
+      const totals = chart.reduce(
+        (acc, row) => {
+          acc.views += row.views;
+          acc.clicks += row.clicks;
+          return acc;
+        },
+        { views: 0, clicks: 0 }
+      );
+
+      return json({
+        success: true,
+        scope,
+        rangeDays,
+        totals: {
+          views: totals.views,
+          clicks: totals.clicks,
+          ctr: totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0,
+        },
+        chart,
+        skipRevalidate: true,
+      });
+    }
+
+    const dailyTotals = await db.bannerAnalytic.groupBy({
+      by: ["date"],
+      where: { bannerId: banner.id, date: { gte: startDate } },
+      _sum: { views: true, clicks: true },
+      orderBy: { date: "asc" },
+    });
+
+    const chart: Array<{ date: string; views: number; clicks: number }> = [];
+    const dailyMap = new Map(
+      dailyTotals.map((row) => [
+        row.date.toISOString().slice(0, 10),
+        { views: row._sum.views || 0, clicks: row._sum.clicks || 0 },
+      ])
+    );
+    for (let i = 0; i < rangeDays; i += 1) {
+      const day = new Date(startDate);
+      day.setUTCDate(startDate.getUTCDate() + i);
+      const key = day.toISOString().slice(0, 10);
+      const values = dailyMap.get(key) || { views: 0, clicks: 0 };
+      chart.push({ date: key, views: values.views, clicks: values.clicks });
+    }
+
+    const totals = chart.reduce(
+      (acc, row) => {
+        acc.views += row.views;
+        acc.clicks += row.clicks;
+        return acc;
+      },
+      { views: 0, clicks: 0 }
+    );
+
+    return json({
+      success: true,
+      scope,
+      rangeDays,
+      totals: {
+        views: totals.views,
+        clicks: totals.clicks,
+        ctr: totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0,
+      },
+      chart,
+      skipRevalidate: true,
+    });
   }
 
   return json({ success: false, error: "Invalid action." }, { status: 400 });
@@ -1314,6 +1502,8 @@ export default function BannerEdit() {
   const generateFetcher = useFetcher();
   const pollFetcher = useFetcher();
   const uploadFetcher = useFetcher();
+  const productFetcher = useFetcher();
+  const filesFetcher = useFetcher();
   const characterUploadFetcher = useFetcher();
   const productUploadFetcher = useFetcher();
   const attachFetcher = useFetcher();
@@ -1321,6 +1511,7 @@ export default function BannerEdit() {
   const reorderFetcher = useFetcher();
   const removeItemFetcher = useFetcher();
   const deleteFetcher = useFetcher();
+  const analyticsFetcher = useFetcher();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalOption, setModalOption] = useState<
@@ -1403,6 +1594,9 @@ export default function BannerEdit() {
   const [announcementCtaUrl, setAnnouncementCtaUrl] = useState(
     banner.announcementCtaUrl || ""
   );
+  const [announcementCtaTarget, setAnnouncementCtaTarget] = useState(
+    banner.announcementCtaTarget || "_self"
+  );
   const [announcementShowCountdown, setAnnouncementShowCountdown] = useState(
     Boolean(banner.announcementShowCountdown)
   );
@@ -1474,6 +1668,16 @@ export default function BannerEdit() {
   const [itemTagsDraft, setItemTagsDraft] = useState<Record<string, any>>({});
   const [contentDragIndex, setContentDragIndex] = useState<number | null>(null);
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
+  const [bannerAnalyticsOpen, setBannerAnalyticsOpen] = useState(false);
+  const [itemAnalyticsOpen, setItemAnalyticsOpen] = useState(false);
+  const [analyticsRange, setAnalyticsRange] = useState("30");
+  const [bannerAnalytics, setBannerAnalytics] = useState<any | null>(null);
+  const [itemAnalytics, setItemAnalytics] = useState<any | null>(null);
+  const [selectedAnalyticsItemId, setSelectedAnalyticsItemId] = useState<string | null>(null);
+  const isVideoSubmitting = videoFetcher.state !== "idle";
+  const [shopifyProductsState, setShopifyProductsState] = useState(shopifyProducts);
+  const [shopifyFilesState, setShopifyFilesState] = useState(shopifyFiles);
+  const [productLoadErrorState, setProductLoadErrorState] = useState(productLoadError);
 
   const storageUsageLabel = useMemo(() => {
     const usedGB = storageUsedMB / 1024;
@@ -1481,13 +1685,13 @@ export default function BannerEdit() {
   }, [storageUsedMB, storageLimitGB]);
 
   const attachedImageIds = useMemo(() => {
-    return new Set(bannerItems.map((item) => item.imageId).filter(Boolean) as string[]);
-  }, [bannerItems]);
+    return new Set(orderedItems.map((item) => item.imageId).filter(Boolean) as string[]);
+  }, [orderedItems]);
   const attachedExternalUrls = useMemo(() => {
     return new Set(
-      bannerItems.map((item) => item.externalImageUrl).filter(Boolean) as string[]
+      orderedItems.map((item) => item.externalImageUrl).filter(Boolean) as string[]
     );
-  }, [bannerItems]);
+  }, [orderedItems]);
 
   const titleError =
     titleValue.trim().length === 0 ? "Title is required" : undefined;
@@ -1515,6 +1719,7 @@ export default function BannerEdit() {
       announcementText?: string;
       announcementCtaText?: string;
       announcementCtaUrl?: string;
+      announcementCtaTarget?: string;
       announcementClosable?: boolean;
       announcementCloseColor?: string;
       announcementMarquee?: boolean;
@@ -1578,6 +1783,10 @@ export default function BannerEdit() {
       formData.set("announcementText", next?.announcementText ?? announcementText);
       formData.set("announcementCtaText", next?.announcementCtaText ?? announcementCtaText);
       formData.set("announcementCtaUrl", next?.announcementCtaUrl ?? announcementCtaUrl);
+      formData.set(
+        "announcementCtaTarget",
+        next?.announcementCtaTarget ?? announcementCtaTarget
+      );
       formData.set(
         "announcementClosable",
         String(next?.announcementClosable ?? announcementClosableValue)
@@ -1655,6 +1864,7 @@ export default function BannerEdit() {
     [
       announcementCtaText,
       announcementCtaUrl,
+      announcementCtaTarget,
       announcementCountdownDurationHours,
       announcementCountdownEndAt,
       announcementCountdownMode,
@@ -1685,13 +1895,15 @@ export default function BannerEdit() {
 
   const selectedProduct = useMemo(() => {
     if (!selectedShopifyProductId) return null;
-    return shopifyProducts.find((product) => product.id === selectedShopifyProductId) || null;
-  }, [selectedShopifyProductId, shopifyProducts]);
+    return (
+      shopifyProductsState.find((product) => product.id === selectedShopifyProductId) || null
+    );
+  }, [selectedShopifyProductId, shopifyProductsState]);
 
   const pendingProduct = useMemo(() => {
     if (!pendingProductId) return null;
-    return shopifyProducts.find((product) => product.id === pendingProductId) || null;
-  }, [pendingProductId, shopifyProducts]);
+    return shopifyProductsState.find((product) => product.id === pendingProductId) || null;
+  }, [pendingProductId, shopifyProductsState]);
 
   const pendingCharacterImage = useMemo(() => {
     if (!pendingCharacterSelection) return null;
@@ -1779,6 +1991,8 @@ export default function BannerEdit() {
       showCta: false,
       ctaText: "",
       ctaUrl: "",
+      ctaTarget: "_self",
+      ctaMode: "button",
       showCountdown: false,
       countdownMode: "fixed",
       countdownEndAt: "",
@@ -1792,6 +2006,53 @@ export default function BannerEdit() {
       ...(itemEditor.tags || {}),
     });
   }, [itemEditorOpen, itemEditor]);
+
+  useEffect(() => {
+    setShopifyProductsState(shopifyProducts);
+    setProductLoadErrorState(productLoadError);
+  }, [shopifyProducts, productLoadError]);
+
+  useEffect(() => {
+    setShopifyFilesState(shopifyFiles);
+  }, [shopifyFiles]);
+
+  useEffect(() => {
+    if (!modalOpen || modalOption !== "gallery") return;
+    if (galleryTab !== "shopify") return;
+    if (shopifyFilesState.length > 0) return;
+    if (filesFetcher.state !== "idle") return;
+    const formData = new FormData();
+    formData.set("action", "load-shopify-files");
+    filesFetcher.submit(formData, { method: "post" });
+  }, [modalOpen, modalOption, galleryTab, shopifyFilesState.length, filesFetcher]);
+
+  useEffect(() => {
+    if (!productModalOpen) return;
+    if (shopifyProductsState.length > 0) return;
+    if (productFetcher.state !== "idle") return;
+    const formData = new FormData();
+    formData.set("action", "load-shopify-products");
+    productFetcher.submit(formData, { method: "post" });
+  }, [productModalOpen, shopifyProductsState.length, productFetcher]);
+
+  useEffect(() => {
+    const data = productFetcher.data as any;
+    if (!data) return;
+    if (Array.isArray(data.shopifyProducts)) {
+      setShopifyProductsState(data.shopifyProducts);
+    }
+    if (data.productLoadError !== undefined) {
+      setProductLoadErrorState(data.productLoadError);
+    }
+  }, [productFetcher.data]);
+
+  useEffect(() => {
+    const data = filesFetcher.data as any;
+    if (!data) return;
+    if (Array.isArray(data.shopifyFiles)) {
+      setShopifyFilesState(data.shopifyFiles);
+    }
+  }, [filesFetcher.data]);
 
   useEffect(() => {
     if (attachFetcher.data && "success" in attachFetcher.data && attachFetcher.data.success) {
@@ -1811,6 +2072,28 @@ export default function BannerEdit() {
   }, [videoFetcher.data, handleModalClose]);
 
   useEffect(() => {
+    const data = attachFetcher.data as any;
+    if (!data?.item) return;
+    setOrderedItems((prev) =>
+      layoutValue === "hero" ? [data.item] : [...prev, data.item]
+    );
+  }, [attachFetcher.data, layoutValue]);
+
+  useEffect(() => {
+    const data = videoFetcher.data as any;
+    if (!data?.item) return;
+    setOrderedItems((prev) =>
+      layoutValue === "hero" ? [data.item] : [...prev, data.item]
+    );
+  }, [videoFetcher.data, layoutValue]);
+
+  useEffect(() => {
+    const data = removeItemFetcher.data as any;
+    if (!data?.removedItemId) return;
+    setOrderedItems((prev) => prev.filter((item) => item.id !== data.removedItemId));
+  }, [removeItemFetcher.data]);
+
+  useEffect(() => {
     if (!previewOpen) return;
     fetch(`/app/banners/${banner.id}/preview${editSearch}`)
       .then((res) => res.text())
@@ -1822,6 +2105,36 @@ export default function BannerEdit() {
     if (previewOpen) return;
     setPreviewHtml("");
   }, [previewOpen]);
+
+  useEffect(() => {
+    if (!bannerAnalyticsOpen) return;
+    const formData = new FormData();
+    formData.set("action", "get-analytics");
+    formData.set("scope", "banner");
+    formData.set("range", analyticsRange);
+    analyticsFetcher.submit(formData, { method: "post" });
+  }, [bannerAnalyticsOpen, analyticsRange, analyticsFetcher]);
+
+  useEffect(() => {
+    if (!itemAnalyticsOpen || !selectedAnalyticsItemId) return;
+    const formData = new FormData();
+    formData.set("action", "get-analytics");
+    formData.set("scope", "item");
+    formData.set("itemId", selectedAnalyticsItemId);
+    formData.set("range", analyticsRange);
+    analyticsFetcher.submit(formData, { method: "post" });
+  }, [itemAnalyticsOpen, analyticsRange, analyticsFetcher, selectedAnalyticsItemId]);
+
+  useEffect(() => {
+    if (!analyticsFetcher.data || typeof analyticsFetcher.data !== "object") return;
+    const data = analyticsFetcher.data as any;
+    if (data.scope === "banner") {
+      setBannerAnalytics(data);
+    }
+    if (data.scope === "item") {
+      setItemAnalytics(data);
+    }
+  }, [analyticsFetcher.data]);
 
   useEffect(() => {
     if (!advancedOpen) return;
@@ -2088,6 +2401,8 @@ export default function BannerEdit() {
       showCta?: boolean;
       ctaText?: string;
       ctaUrl?: string;
+      ctaTarget?: string;
+      ctaMode?: string;
     }
   ) => {
     const formData = new FormData();
@@ -2113,6 +2428,12 @@ export default function BannerEdit() {
     }
     if (data.ctaUrl !== undefined) {
       formData.set("ctaUrl", data.ctaUrl);
+    }
+    if (data.ctaTarget !== undefined) {
+      formData.set("ctaTarget", data.ctaTarget);
+    }
+    if (data.ctaMode !== undefined) {
+      formData.set("ctaMode", data.ctaMode);
     }
     itemUpdateFetcher.submit(formData, { method: "post" });
   };
@@ -2175,6 +2496,9 @@ export default function BannerEdit() {
                 </div>
               </InlineStack>
               <InlineStack gap="200" blockAlign="center" wrap={false}>
+                <Button variant="secondary" onClick={() => setBannerAnalyticsOpen(true)}>
+                  Analytics
+                </Button>
                 <Button variant="secondary" onClick={() => setPreviewOpen(true)}>
                   Preview
                 </Button>
@@ -2475,6 +2799,20 @@ export default function BannerEdit() {
                       }}
                       placeholder="https://"
                     />
+                    <Select
+                      label="CTA target"
+                      options={[
+                        { label: "Same tab", value: "_self" },
+                        { label: "New tab", value: "_blank" },
+                        { label: "Parent frame", value: "_parent" },
+                        { label: "Top frame", value: "_top" },
+                      ]}
+                      value={announcementCtaTarget}
+                      onChange={(value) => {
+                        setAnnouncementCtaTarget(value);
+                        saveBanner({ announcementCtaTarget: value });
+                      }}
+                    />
                     <Checkbox
                       label="Allow close"
                       checked={announcementClosableValue}
@@ -2678,6 +3016,16 @@ export default function BannerEdit() {
                                   >
                                     Edit info
                                   </Button>
+                                  <Button
+                                    size="slim"
+                                    variant="secondary"
+                                    onClick={() => {
+                                      setSelectedAnalyticsItemId(item.id);
+                                      setItemAnalyticsOpen(true);
+                                    }}
+                                  >
+                                    Analytics
+                                  </Button>
                                 </div>
                                 {(Array.isArray(item.tags?.contentOrder)
                                   ? item.tags.contentOrder
@@ -2697,10 +3045,15 @@ export default function BannerEdit() {
                                       </Text>
                                     );
                                   }
-                                  if (key === "cta" && item.tags?.ctaText) {
+                                  if (key === "cta" && item.tags?.showCta) {
+                                    const ctaMode = item.tags?.ctaMode || "button";
+                                    const ctaLabel =
+                                      ctaMode === "item"
+                                        ? "Entire item"
+                                        : item.tags?.ctaText || "Button";
                                     return (
                                       <Text key={key} as="p" variant="bodySm">
-                                        CTA: {item.tags.ctaText}
+                                        CTA: {ctaLabel}
                                       </Text>
                                     );
                                   }
@@ -2894,7 +3247,7 @@ export default function BannerEdit() {
                   }}
                 />
 
-                {galleryTab === "shopify" && shopifyFiles.length === 0 && (
+                {galleryTab === "shopify" && shopifyFilesState.length === 0 && (
                   <EmptyState
                     heading="No Shopify files yet"
                     image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
@@ -2912,10 +3265,10 @@ export default function BannerEdit() {
                   </EmptyState>
                 )}
 
-                {((galleryTab === "shopify" && shopifyFiles.length > 0) ||
+                {((galleryTab === "shopify" && shopifyFilesState.length > 0) ||
                   (galleryTab === "app" && appImageOptions.length > 0)) && (
                   <div className="bainners-image-grid">
-                    {(galleryTab === "shopify" ? shopifyFiles : appImageOptions).map((image) => {
+                    {(galleryTab === "shopify" ? shopifyFilesState : appImageOptions).map((image) => {
                       const imageUrl = "storageUrl" in image ? image.storageUrl : image.url;
                       const isSelected = selectedGalleryImage?.url === imageUrl;
                       const alreadyUsed =
@@ -3057,7 +3410,8 @@ export default function BannerEdit() {
                   <InlineStack align="end">
                     <Button
                       primary
-                      disabled={!videoUrl}
+                      disabled={!videoUrl || isVideoSubmitting}
+                      loading={isVideoSubmitting}
                       onClick={() => {
                         const formData = new FormData();
                         formData.set("action", "add-video");
@@ -3451,6 +3805,9 @@ export default function BannerEdit() {
             formData.set("itemId", itemEditor.id);
             formData.set("tagsJson", JSON.stringify(nextTags));
             itemUpdateFetcher.submit(formData, { method: "post" });
+            setOrderedItems((prev) =>
+              prev.map((item) => (item.id === itemEditor.id ? { ...item, tags: nextTags } : item))
+            );
             setItemEditorOpen(false);
           },
         }}
@@ -3551,18 +3908,42 @@ export default function BannerEdit() {
                           onChange={(value) => updateItemTagsDraft({ showCta: value })}
                         />
                         {itemTagsDraft.showCta ? (
-                          <InlineStack gap="200" blockAlign="center">
-                            <TextField
-                              label="CTA text"
-                              value={itemTagsDraft.ctaText || ""}
-                              onChange={(value) => updateItemTagsDraft({ ctaText: value })}
+                          <BlockStack gap="200">
+                            <Select
+                              label="CTA type"
+                              options={[
+                                { label: "Button", value: "button" },
+                                { label: "Entire item clickable", value: "item" },
+                              ]}
+                              value={itemTagsDraft.ctaMode || "button"}
+                              onChange={(value) => updateItemTagsDraft({ ctaMode: value })}
                             />
-                            <TextField
-                              label="CTA URL"
-                              value={itemTagsDraft.ctaUrl || ""}
-                              onChange={(value) => updateItemTagsDraft({ ctaUrl: value })}
-                            />
-                          </InlineStack>
+                            <InlineStack gap="200" blockAlign="center">
+                              {itemTagsDraft.ctaMode !== "item" ? (
+                                <TextField
+                                  label="CTA text"
+                                  value={itemTagsDraft.ctaText || ""}
+                                  onChange={(value) => updateItemTagsDraft({ ctaText: value })}
+                                />
+                              ) : null}
+                              <TextField
+                                label="CTA URL"
+                                value={itemTagsDraft.ctaUrl || ""}
+                                onChange={(value) => updateItemTagsDraft({ ctaUrl: value })}
+                              />
+                              <Select
+                                label="CTA target"
+                                options={[
+                                  { label: "Same tab", value: "_self" },
+                                  { label: "New tab", value: "_blank" },
+                                  { label: "Parent frame", value: "_parent" },
+                                  { label: "Top frame", value: "_top" },
+                                ]}
+                                value={itemTagsDraft.ctaTarget || "_self"}
+                                onChange={(value) => updateItemTagsDraft({ ctaTarget: value })}
+                              />
+                            </InlineStack>
+                          </BlockStack>
                         ) : null}
                       </BlockStack>
                     )}
@@ -3685,6 +4066,166 @@ export default function BannerEdit() {
               srcDoc={previewHtml}
             />
           </div>
+        </Modal.Section>
+      </Modal>
+
+      <Modal
+        open={bannerAnalyticsOpen}
+        onClose={() => setBannerAnalyticsOpen(false)}
+        title="Banner analytics"
+        size="large"
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h3" variant="headingSm">
+                Overview
+              </Text>
+              <Select
+                label="Date range"
+                labelHidden
+                options={[
+                  { label: "Last 7 days", value: "7" },
+                  { label: "Last 30 days", value: "30" },
+                  { label: "Last 90 days", value: "90" },
+                ]}
+                value={analyticsRange}
+                onChange={(value) => setAnalyticsRange(value)}
+              />
+            </InlineStack>
+            <InlineStack gap="300">
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Views
+                  </Text>
+                  <Text as="p" variant="headingMd">
+                    {bannerAnalytics?.totals?.views ?? 0}
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Clicks
+                  </Text>
+                  <Text as="p" variant="headingMd">
+                    {bannerAnalytics?.totals?.clicks ?? 0}
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    CTR
+                  </Text>
+                  <Text as="p" variant="headingMd">
+                    {(bannerAnalytics?.totals?.ctr ?? 0).toFixed(2)}%
+                  </Text>
+                </BlockStack>
+              </Card>
+            </InlineStack>
+            <div className="bainners-analytics-chart">
+              {(bannerAnalytics?.chart || []).map((row: any) => (
+                <div key={row.date} className="bainners-analytics-bar">
+                  <div
+                    className="bainners-analytics-bar-fill"
+                    style={{
+                      height: `${Math.round(
+                        (row.views /
+                          Math.max(
+                            1,
+                            ...(bannerAnalytics?.chart || []).map((entry: any) => entry.views)
+                          )) *
+                          100
+                      )}%`,
+                    }}
+                  />
+                  <span>{String(row.date || "").slice(5)}</span>
+                </div>
+              ))}
+            </div>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+
+      <Modal
+        open={itemAnalyticsOpen}
+        onClose={() => setItemAnalyticsOpen(false)}
+        title="Item analytics"
+        size="large"
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h3" variant="headingSm">
+                Overview
+              </Text>
+              <Select
+                label="Date range"
+                labelHidden
+                options={[
+                  { label: "Last 7 days", value: "7" },
+                  { label: "Last 30 days", value: "30" },
+                  { label: "Last 90 days", value: "90" },
+                ]}
+                value={analyticsRange}
+                onChange={(value) => setAnalyticsRange(value)}
+              />
+            </InlineStack>
+            <InlineStack gap="300">
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Views
+                  </Text>
+                  <Text as="p" variant="headingMd">
+                    {itemAnalytics?.totals?.views ?? 0}
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Clicks
+                  </Text>
+                  <Text as="p" variant="headingMd">
+                    {itemAnalytics?.totals?.clicks ?? 0}
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card background="bg-surface-secondary">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    CTR
+                  </Text>
+                  <Text as="p" variant="headingMd">
+                    {(itemAnalytics?.totals?.ctr ?? 0).toFixed(2)}%
+                  </Text>
+                </BlockStack>
+              </Card>
+            </InlineStack>
+            <div className="bainners-analytics-chart">
+              {(itemAnalytics?.chart || []).map((row: any) => (
+                <div key={row.date} className="bainners-analytics-bar">
+                  <div
+                    className="bainners-analytics-bar-fill"
+                    style={{
+                      height: `${Math.round(
+                        (row.views /
+                          Math.max(
+                            1,
+                            ...(itemAnalytics?.chart || []).map((entry: any) => entry.views)
+                          )) *
+                          100
+                      )}%`,
+                    }}
+                  />
+                  <span>{String(row.date || "").slice(5)}</span>
+                </div>
+              ))}
+            </div>
+          </BlockStack>
         </Modal.Section>
       </Modal>
 
@@ -4020,11 +4561,11 @@ export default function BannerEdit() {
                 </Text>
               </BlockStack>
             )}
-            {productLoadError ? (
+            {productLoadErrorState ? (
               <PolarisBanner tone="critical" title="Failed to load products">
-                <p>{productLoadError}</p>
+                <p>{productLoadErrorState}</p>
               </PolarisBanner>
-            ) : shopifyProducts.length === 0 ? (
+            ) : shopifyProductsState.length === 0 ? (
               <PolarisBanner tone="info">
                 <p>No Shopify products found.</p>
               </PolarisBanner>
@@ -4034,7 +4575,7 @@ export default function BannerEdit() {
                   label="Select product"
                   options={[
                     { label: "Select a product...", value: "", disabled: true },
-                    ...shopifyProducts.map((product) => ({
+                    ...shopifyProductsState.map((product) => ({
                       label: product.title,
                       value: product.id,
                     })),

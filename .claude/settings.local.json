@@ -4,7 +4,11 @@
       "Bash(npx prisma generate:*)",
       "Bash(npx prisma migrate dev:*)",
       "Bash(ngrok config add-authtoken:*)",
-      "Bash(pkill ngrok:*)"
+      "Bash(pkill ngrok:*)",
+      "Bash(node check-metaobjects-simple.mjs:*)",
+      "Bash(node debug-metaobjects.mjs:*)",
+      "Bash(node force-sync-metaobjects.mjs)",
+      "Bash(node:*)"
     ]
   }
 }

@@ -102,12 +102,27 @@
       });
     }
 
+    function executeScripts(root) {
+      var scripts = root.querySelectorAll("script");
+      scripts.forEach(function (script) {
+        var newScript = document.createElement("script");
+        if (script.src) {
+          newScript.src = script.src;
+        } else {
+          newScript.textContent = script.textContent;
+        }
+        document.head.appendChild(newScript);
+        script.remove();
+      });
+    }
+
     fetch(url, { credentials: "same-origin" })
       .then(function (response) {
         return response.text();
       })
       .then(function (html) {
         container.innerHTML = html;
+        executeScripts(container);
         if (container.querySelector(".bainners-swiper")) {
           loadSwiperAssets().then(function () {
             initSwipers(container);

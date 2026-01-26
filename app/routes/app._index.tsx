@@ -58,6 +58,10 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
           definition: {
             name: "Bainners Banner",
             type: METAOBJECT_TYPE,
+            displayNameKey: "title",
+            access: {
+              storefront: "PUBLIC_READ",
+            },
             fieldDefinitions: [
               {
                 name: "Banner ID",
@@ -77,6 +81,12 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
                 type: "single_line_text_field",
                 required: false,
               },
+              {
+                name: "Thumbnail",
+                key: "thumbnail",
+                type: "single_line_text_field",
+                required: false,
+              },
             ],
           },
         },
@@ -88,84 +98,6 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
     }
   } catch (error) {
     console.warn("Failed to create metaobject definition", error);
-  }
-}
-
-async function syncBannerMetaobject(admin: any, banner: { id: string; title: string; status: string }) {
-  if (!admin) return;
-  const query = `banner_id:${banner.id}`;
-  let existingId: string | null = null;
-  try {
-    const lookup = await admin.graphql(
-      `
-      query FindMetaobject($type: String!, $query: String!) {
-        metaobjects(first: 1, type: $type, query: $query) {
-          nodes {
-            id
-          }
-        }
-      }
-      `,
-      { variables: { type: METAOBJECT_TYPE, query } }
-    );
-    const json = await lookup.json();
-    existingId = json?.data?.metaobjects?.nodes?.[0]?.id || null;
-  } catch (error) {
-    console.warn("Failed to lookup metaobject", error);
-  }
-
-  const fields = [
-    { key: "banner_id", value: banner.id },
-    { key: "title", value: banner.title },
-    { key: "status", value: banner.status },
-  ];
-
-  try {
-    if (existingId) {
-      await admin.graphql(
-        `
-        mutation UpdateMetaobject($id: ID!, $metaobject: MetaobjectUpdateInput!) {
-          metaobjectUpdate(id: $id, metaobject: $metaobject) {
-            metaobject {
-              id
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-        `,
-        { variables: { id: existingId, metaobject: { fields } } }
-      );
-    } else {
-      await admin.graphql(
-        `
-        mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
-          metaobjectCreate(metaobject: $metaobject) {
-            metaobject {
-              id
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-        `,
-        {
-          variables: {
-            metaobject: {
-              type: METAOBJECT_TYPE,
-              handle: `banner-${banner.id}`,
-              fields,
-            },
-          },
-        }
-      );
-    }
-  } catch (error) {
-    console.warn("Failed to upsert metaobject", error);
   }
 }
 
@@ -238,14 +170,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       images: true,
     },
   });
-
-  if (shopRecord) {
-    const activeBanners = await db.banner.findMany({
-      where: { shopId: shopRecord.id, status: "active" },
-      select: { id: true, title: true, status: true },
-    });
-    await Promise.all(activeBanners.map((banner) => syncBannerMetaobject(admin, banner)));
-  }
 
   const totalBanners = shopRecord?.banners.length || 0;
   const totalImages = shopRecord?.images.length || 0;

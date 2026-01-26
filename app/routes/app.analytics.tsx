@@ -1,0 +1,291 @@
+import { json, type LoaderFunctionArgs } from "@remix-run/node";
+import { useLoaderData, useSearchParams } from "@remix-run/react";
+import { Badge, BlockStack, Card, InlineStack, Layout, Page, Select, Text } from "@shopify/polaris";
+import { authenticate } from "../shopify.server";
+import { db } from "../db.server";
+
+function startOfDay(date: Date) {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const { session } = await authenticate.admin(request);
+  const url = new URL(request.url);
+  const shopParam = url.searchParams.get("shop") || undefined;
+  const shop = session?.shop || shopParam;
+  const rangeParam = url.searchParams.get("range") || "30";
+  const rangeDays = Math.max(7, Math.min(90, Number(rangeParam) || 30));
+
+  if (!shop) {
+    return json({ rangeDays, totals: { views: 0, clicks: 0, ctr: 0 }, chart: [], banners: [], items: [] });
+  }
+
+  const shopRecord = await db.shop.findUnique({
+    where: { shopDomain: shop },
+  });
+  if (!shopRecord) {
+    return json({ rangeDays, totals: { views: 0, clicks: 0, ctr: 0 }, chart: [], banners: [], items: [] });
+  }
+
+  const today = startOfDay(new Date());
+  const startDate = new Date(today);
+  startDate.setUTCDate(startDate.getUTCDate() - (rangeDays - 1));
+
+  const dailyTotals = await db.bannerAnalytic.groupBy({
+    by: ["date"],
+    where: { shopId: shopRecord.id, date: { gte: startDate } },
+    _sum: { views: true, clicks: true },
+    orderBy: { date: "asc" },
+  });
+
+  const chartData: Array<{ date: string; views: number; clicks: number }> = [];
+  const dailyMap = new Map(
+    dailyTotals.map((row) => [
+      row.date.toISOString().slice(0, 10),
+      { views: row._sum.views || 0, clicks: row._sum.clicks || 0 },
+    ])
+  );
+  for (let i = 0; i < rangeDays; i += 1) {
+    const day = new Date(startDate);
+    day.setUTCDate(startDate.getUTCDate() + i);
+    const key = day.toISOString().slice(0, 10);
+    const values = dailyMap.get(key) || { views: 0, clicks: 0 };
+    chartData.push({ date: key, views: values.views, clicks: values.clicks });
+  }
+
+  const totals = chartData.reduce(
+    (acc, row) => {
+      acc.views += row.views;
+      acc.clicks += row.clicks;
+      return acc;
+    },
+    { views: 0, clicks: 0 }
+  );
+
+  const bannerAgg = await db.bannerAnalytic.groupBy({
+    by: ["bannerId"],
+    where: { shopId: shopRecord.id, date: { gte: startDate } },
+    _sum: { views: true, clicks: true },
+  });
+  const bannerIds = bannerAgg.map((row) => row.bannerId);
+  const bannerRecords = await db.banner.findMany({
+    where: { id: { in: bannerIds } },
+    select: { id: true, title: true, status: true, layout: true },
+  });
+  const bannerLookup = new Map(bannerRecords.map((banner) => [banner.id, banner]));
+  const bannerRows = bannerAgg
+    .map((row) => {
+      const banner = bannerLookup.get(row.bannerId);
+      const views = row._sum.views || 0;
+      const clicks = row._sum.clicks || 0;
+      const ctr = views > 0 ? (clicks / views) * 100 : 0;
+      return {
+        id: row.bannerId,
+        title: banner?.title || "Untitled",
+        status: banner?.status || "draft",
+        layout: banner?.layout || "hero",
+        views,
+        clicks,
+        ctr,
+      };
+    })
+    .sort((a, b) => b.views - a.views);
+
+  const itemAgg = await db.bannerItemAnalytic.groupBy({
+    by: ["bannerItemId"],
+    where: { shopId: shopRecord.id, date: { gte: startDate } },
+    _sum: { views: true, clicks: true },
+  });
+  const itemIds = itemAgg.map((row) => row.bannerItemId);
+  const itemRecords = await db.bannerItem.findMany({
+    where: { id: { in: itemIds } },
+    select: { id: true, bannerId: true },
+  });
+  const itemLookup = new Map(itemRecords.map((item) => [item.id, item]));
+  const itemRows = itemAgg
+    .map((row) => {
+      const item = itemLookup.get(row.bannerItemId);
+      const views = row._sum.views || 0;
+      const clicks = row._sum.clicks || 0;
+      const ctr = views > 0 ? (clicks / views) * 100 : 0;
+      return {
+        id: row.bannerItemId,
+        bannerId: item?.bannerId || "",
+        views,
+        clicks,
+        ctr,
+      };
+    })
+    .sort((a, b) => b.views - a.views);
+
+  return json({
+    rangeDays,
+    totals: {
+      views: totals.views,
+      clicks: totals.clicks,
+      ctr: totals.views > 0 ? (totals.clicks / totals.views) * 100 : 0,
+    },
+    chart: chartData,
+    banners: bannerRows,
+    items: itemRows,
+  });
+}
+
+export default function AnalyticsPage() {
+  const { rangeDays, totals, chart, banners, items } = useLoaderData<typeof loader>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const maxViews = chart.reduce((max, row) => Math.max(max, row.views), 1);
+
+  return (
+    <Page title="Analytics">
+      <Layout>
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="headingMd" as="h2">
+                  Overview
+                </Text>
+                <Select
+                  label="Date range"
+                  labelHidden
+                  options={[
+                    { label: "Last 7 days", value: "7" },
+                    { label: "Last 30 days", value: "30" },
+                    { label: "Last 90 days", value: "90" },
+                  ]}
+                  value={String(rangeDays)}
+                  onChange={(value) => {
+                    searchParams.set("range", value);
+                    setSearchParams(searchParams);
+                  }}
+                />
+              </InlineStack>
+              <InlineStack gap="300">
+                <Card background="bg-surface-secondary">
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Views
+                    </Text>
+                    <Text as="p" variant="headingMd">
+                      {totals.views}
+                    </Text>
+                  </BlockStack>
+                </Card>
+                <Card background="bg-surface-secondary">
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Clicks
+                    </Text>
+                    <Text as="p" variant="headingMd">
+                      {totals.clicks}
+                    </Text>
+                  </BlockStack>
+                </Card>
+                <Card background="bg-surface-secondary">
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      CTR
+                    </Text>
+                    <Text as="p" variant="headingMd">
+                      {totals.ctr.toFixed(2)}%
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </InlineStack>
+              <div className="bainners-analytics-chart">
+                {chart.map((row) => (
+                  <div key={row.date} className="bainners-analytics-bar">
+                    <div
+                      className="bainners-analytics-bar-fill"
+                      style={{
+                        height: `${Math.round((row.views / maxViews) * 100)}%`,
+                      }}
+                    />
+                    <span>{row.date.slice(5)}</span>
+                  </div>
+                ))}
+              </div>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="300">
+              <Text variant="headingMd" as="h2">
+                By banner
+              </Text>
+              <div className="bainners-analytics-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Banner</th>
+                      <th>Status</th>
+                      <th>Layout</th>
+                      <th>Views</th>
+                      <th>Clicks</th>
+                      <th>CTR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {banners.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.title}</td>
+                        <td>
+                          <Badge tone={row.status === "active" ? "success" : "info"}>
+                            {row.status}
+                          </Badge>
+                        </td>
+                        <td>{row.layout}</td>
+                        <td>{row.views}</td>
+                        <td>{row.clicks}</td>
+                        <td>{row.ctr.toFixed(2)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="300">
+              <Text variant="headingMd" as="h2">
+                By item
+              </Text>
+              <div className="bainners-analytics-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item ID</th>
+                      <th>Banner ID</th>
+                      <th>Views</th>
+                      <th>Clicks</th>
+                      <th>CTR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.id}</td>
+                        <td>{row.bannerId}</td>
+                        <td>{row.views}</td>
+                        <td>{row.clicks}</td>
+                        <td>{row.ctr.toFixed(2)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+    </Page>
+  );
+}

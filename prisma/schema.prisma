@@ -46,6 +46,27 @@ model Shop {
   installedAt     DateTime @default(now())
   uninstalledAt   DateTime?
   setupGuideDismissedAt DateTime?
+  defaultBannerBackgroundColor String? @db.VarChar(20)
+  defaultTitleFontSize String? @db.VarChar(20)
+  defaultDescriptionFontSize String? @db.VarChar(20)
+  defaultTitleColor String? @db.VarChar(20)
+  defaultDescriptionColor String? @db.VarChar(20)
+  defaultCtaTextColor String? @db.VarChar(20)
+  defaultCtaBackgroundColor String? @db.VarChar(20)
+  defaultCtaBorderColor String? @db.VarChar(20)
+  defaultCtaBordered Boolean @default(false)
+  defaultCtaRounded Boolean @default(true)
+  defaultCtaShadow Boolean @default(false)
+  defaultCountdownTextColor String? @db.VarChar(20)
+  defaultCountdownBackgroundColor String? @db.VarChar(20)
+  defaultCountdownStyle String? @db.VarChar(20)
+  defaultSliderArrowStyle String? @db.VarChar(20)
+  defaultSliderArrowColor String? @db.VarChar(20)
+  defaultSliderBulletColor String? @db.VarChar(20)
+  defaultAnnouncementMarquee Boolean @default(false)
+  defaultAnnouncementAnimation String? @db.VarChar(20)
+  defaultAnnouncementCloseColor String? @db.VarChar(20)
+  defaultAnnouncementClosable Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -54,6 +75,8 @@ model Shop {
   images          Image[]
   styles          Style[]
   analytics       BannerAnalytic[]
+  itemAnalytics   BannerItemAnalytic[]
+  bannerEvents    BannerEvent[]
 
   @@index([shopDomain])
   @@index([plan])
@@ -91,6 +114,7 @@ model Banner {
   announcementText    String?   @db.Text
   announcementCtaText String?   @db.VarChar(100)
   announcementCtaUrl  String?   @db.Text
+  announcementCtaTarget String? @db.VarChar(20)
   announcementClosable Boolean  @default(false)
   announcementCloseColor String? @db.VarChar(20)
   announcementMarquee Boolean   @default(false)
@@ -144,6 +168,7 @@ model Banner {
 
   bannerItems         BannerItem[]
   analytics           BannerAnalytic[]
+  events              BannerEvent[]
 
   @@index([shopId])
   @@index([status])
@@ -177,6 +202,8 @@ model BannerItem {
   alt               String?  @db.VarChar(255)
   tags              Json?    // Array of tags
   analytics         BannerAnalytic[]
+  itemAnalytics     BannerItemAnalytic[]
+  events            BannerEvent[]
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -295,4 +322,50 @@ model BannerAnalytic {
   @@index([bannerId])
   @@index([bannerItemId])
   @@index([date])
+}
+
+model BannerItemAnalytic {
+  id           String   @id @default(uuid())
+  shopId       String
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  bannerItemId String
+  bannerItem   BannerItem @relation(fields: [bannerItemId], references: [id], onDelete: Cascade)
+
+  date   DateTime @db.Date
+  views  Int      @default(0)
+  clicks Int      @default(0)
+  ctr    Float    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bannerItemId, date])
+  @@index([shopId])
+  @@index([bannerItemId])
+  @@index([date])
+}
+
+model BannerEvent {
+  id           String   @id @default(uuid())
+  shopId       String
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  bannerId     String
+  banner       Banner   @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  bannerItemId String?
+  bannerItem   BannerItem? @relation(fields: [bannerItemId], references: [id], onDelete: SetNull)
+
+  eventType String   @db.VarChar(20) // view, click
+  pageUrl   String?  @db.Text
+  pagePath  String?  @db.Text
+  referrer  String?  @db.Text
+  userAgent String?  @db.Text
+  device    String?  @db.VarChar(20)
+
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([bannerId])
+  @@index([bannerItemId])
+  @@index([eventType])
+  @@index([createdAt])
 }

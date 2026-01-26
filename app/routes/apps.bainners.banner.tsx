@@ -137,6 +137,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const textDescription = tags.textDescription || "";
     const ctaText = tags.ctaText || "";
     const ctaUrl = tags.ctaUrl || "#";
+    const ctaTarget = tags.ctaTarget || "_self";
+    const ctaMode = tags.ctaMode || "button";
+    const itemClickable = showCta && ctaMode === "item" && ctaUrl;
+    const ctaRel = ctaTarget === "_blank" ? "noopener noreferrer" : "";
 
     const contentOrder = Array.isArray(tags.contentOrder)
       ? tags.contentOrder
@@ -155,10 +159,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
         if (key === "description" && showText && textDescription) {
           return `<p>${escapeHtml(textDescription)}</p>`;
         }
-        if (key === "cta" && showCta) {
+        if (key === "cta" && showCta && ctaMode !== "item") {
           return `<a class="${ctaClasses}" href="${escapeHtml(
             ctaUrl
-          )}">${escapeHtml(ctaText || "Learn more")}</a>`;
+          )}" target="${escapeHtml(ctaTarget)}" rel="${escapeHtml(ctaRel)}">${escapeHtml(
+            ctaText || "Learn more"
+          )}</a>`;
         }
         if (key === "countdown" && showCountdown) {
           return `<div class="${countdownClass}" data-mode="${escapeHtml(
@@ -176,6 +182,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     const overlayClass = tags.textPosition ? `bainners-overlay--${tags.textPosition}` : "";
     const overlayShadeClass = showOverlay ? "bainners-banner-overlay--shade" : "";
+    const overlayClickClass = itemClickable ? "bainners-banner-overlay--pass-through" : "";
 
     if (tags.mediaType === "video") {
       const videoUrl = tags.videoUrl || "";
@@ -187,36 +194,56 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const controls = tags.showControls === false ? "0" : "1";
       const embedUrl =
         provider === "youtube"
-          ? `https://www.youtube.com/embed/${videoId}?autoplay=${autoplay}&mute=${muted}&loop=${loop}&playlist=${videoId}&controls=${controls}`
+          ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${autoplay}&mute=${muted}&loop=${loop}&playlist=${videoId}&controls=${controls}`
           : provider === "vimeo"
           ? `https://player.vimeo.com/video/${videoId}?autoplay=${autoplay}&muted=${muted}&loop=${loop}&controls=${controls}`
           : videoUrl;
 
       return `
-        <div class="bainners-banner-item">
+        <div class="bainners-banner-item" data-item-id="${escapeHtml(item.id)}">
           <div class="bainners-video">
-            <iframe src="${escapeHtml(embedUrl)}" allow="autoplay; fullscreen" allowfullscreen></iframe>
+            <iframe src="${escapeHtml(
+              embedUrl
+            )}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
           </div>
           ${tags.showControls === false && !showOverlay ? `<div class="bainners-video-blocker"></div>` : ""}
           ${
             showOverlay || overlayItems
-              ? `<div class="bainners-banner-overlay ${overlayClass} ${overlayShadeClass}">
+              ? `<div class="bainners-banner-overlay ${overlayClass} ${overlayShadeClass} ${overlayClickClass}">
                 ${overlayItems}
               </div>`
             : ""
+          }
+          ${
+            itemClickable
+              ? `<a class="bainners-item-link" href="${escapeHtml(
+                  ctaUrl
+                )}" target="${escapeHtml(ctaTarget)}" rel="${escapeHtml(ctaRel)}" aria-label="${escapeHtml(
+                  ctaText || "Open link"
+                )}"></a>`
+              : ""
           }
         </div>
       `;
     }
 
     return `
-      <div class="bainners-banner-item">
+      <div class="bainners-banner-item" data-item-id="${escapeHtml(item.id)}">
         <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" />
         ${
           showOverlay || overlayItems
-            ? `<div class="bainners-banner-overlay ${overlayClass} ${overlayShadeClass}">
+            ? `<div class="bainners-banner-overlay ${overlayClass} ${overlayShadeClass} ${overlayClickClass}">
                 ${overlayItems}
               </div>`
+            : ""
+        }
+        ${
+          itemClickable
+            ? `<a class="bainners-item-link" href="${escapeHtml(
+                ctaUrl
+              )}" target="${escapeHtml(ctaTarget)}" rel="${escapeHtml(ctaRel)}" aria-label="${escapeHtml(
+                ctaText || "Open link"
+              )}"></a>`
             : ""
         }
       </div>
@@ -276,7 +303,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
             banner.announcementCtaText
               ? `<a class="${ctaClasses}" href="${escapeHtml(
                   banner.announcementCtaUrl || "#"
-                )}">${escapeHtml(banner.announcementCtaText)}</a>`
+                )}" target="${escapeHtml(
+                  banner.announcementCtaTarget || "_self"
+                )}" rel="${
+                  banner.announcementCtaTarget === "_blank" ? "noopener noreferrer" : ""
+                }">${escapeHtml(banner.announcementCtaText)}</a>`
               : ""
           }
           ${
@@ -290,7 +321,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const html = `
     <div class="bainners-banner bainners-banner--${escapeHtml(
       banner.layout
-    )}" style="${escapeHtml(bannerStyleVars)}">
+    )}" data-banner-id="${escapeHtml(banner.id)}" style="${escapeHtml(bannerStyleVars)}">
       ${content}
     </div>
     <style>
@@ -306,6 +337,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         gap: 8px;
         padding: 24px;
         color: var(--bainners-title-color, #ffffff);
+        z-index: 2;
       }
       .bainners-overlay--top_left { justify-content: flex-start; align-items: flex-start; text-align: left; }
       .bainners-overlay--top_center { justify-content: flex-start; align-items: center; text-align: center; }
@@ -319,9 +351,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
       .bainners-banner-overlay--shade {
         background: rgba(0, 0, 0, 0.5);
       }
+      .bainners-banner-overlay--pass-through {
+        pointer-events: none;
+      }
       .bainners-banner-overlay > * {
         position: relative;
         z-index: 1;
+      }
+      .bainners-item-link {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        text-decoration: none;
       }
       .bainners-banner-overlay h3 { margin: 0 0 4px 0; font-size: var(--bainners-title-size, 28px); font-weight: 700; color: var(--bainners-title-color, #ffffff); }
       .bainners-banner-overlay p { margin: 0; font-size: var(--bainners-desc-size, 16px); color: var(--bainners-desc-color, #ffffff); }
@@ -354,8 +395,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       .bainners-arrow--minimal .swiper-button-next::after { content: "❯"; font-size: 22px; }
       .swiper-pagination-bullet { background: var(--bainners-bullet-color, #111111); opacity: 0.4; }
       .swiper-pagination-bullet-active { opacity: 1; }
-      .bainners-video { position: relative; width: 100%; min-height: 360px; overflow: hidden; }
-      .bainners-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+      .bainners-video { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; }
+      .bainners-video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; display: block; }
       .bainners-video-blocker { position: absolute; inset: 0; background: rgba(0,0,0,0); z-index: 2; }
       .bainners-announcement { position: relative; display: flex; align-items: center; gap: 16px; padding: 16px 48px 16px 24px; background: var(--bainners-banner-bg, #f6f6f7); color: var(--bainners-title-color, #111111); flex-wrap: wrap; }
       .bainners-announcement-text { font-weight: 600; }
@@ -434,6 +475,93 @@ export async function loader({ request }: LoaderFunctionArgs) {
             var banner = button.closest(".bainners-banner");
             if (banner) banner.style.display = "none";
           });
+        });
+
+        var bannerEl = document.querySelector(".bainners-banner");
+        if (!bannerEl) return;
+        var bannerId = bannerEl.getAttribute("data-banner-id");
+        if (!bannerId) return;
+        var inView = false;
+        var sentBannerView = false;
+        var sentItemViews = {};
+
+        function sendEvent(type, itemId) {
+          try {
+            var payload = {
+              banner_id: bannerId,
+              banner_item_id: itemId || "",
+              event_type: type,
+              page_url: window.location.href,
+              page_path: window.location.pathname,
+              referrer: document.referrer || ""
+            };
+            if (navigator.sendBeacon) {
+              var blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+              navigator.sendBeacon("/apps/bainners/track", blob);
+            } else {
+              fetch("/apps/bainners/track", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+                keepalive: true
+              });
+            }
+          } catch (err) {
+            // no-op
+          }
+        }
+
+        function getActiveItemId() {
+          var activeSlide = bannerEl.querySelector(".swiper-slide-active .bainners-banner-item");
+          var item = activeSlide || bannerEl.querySelector(".bainners-banner-item");
+          return item ? item.getAttribute("data-item-id") : "";
+        }
+
+        function handleView() {
+          if (!sentBannerView) {
+            sendEvent("view", "");
+            sentBannerView = true;
+          }
+          var itemId = getActiveItemId();
+          if (itemId && !sentItemViews[itemId]) {
+            sendEvent("view", itemId);
+            sentItemViews[itemId] = true;
+          }
+        }
+
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting) {
+                inView = true;
+                handleView();
+              } else {
+                inView = false;
+              }
+            });
+          },
+          { threshold: 0.4 }
+        );
+        observer.observe(bannerEl);
+
+        var mutationObserver = new MutationObserver(function () {
+          if (!inView) return;
+          var itemId = getActiveItemId();
+          if (itemId && !sentItemViews[itemId]) {
+            sendEvent("view", itemId);
+            sentItemViews[itemId] = true;
+          }
+        });
+        mutationObserver.observe(bannerEl, { attributes: true, subtree: true, attributeFilter: ["class"] });
+
+        bannerEl.addEventListener("click", function (event) {
+          var target = event.target;
+          if (!target) return;
+          var cta = target.closest(".bainners-banner-cta, .bainners-item-link");
+          if (!cta) return;
+          var item = target.closest(".bainners-banner-item");
+          var itemId = item ? item.getAttribute("data-item-id") : "";
+          sendEvent("click", itemId || "");
         });
       })();
     </script>
