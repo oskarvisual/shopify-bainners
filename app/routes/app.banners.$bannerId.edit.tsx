@@ -17,13 +17,12 @@ import {
   Tabs,
   Text,
   TextField,
-  Thumbnail,
   DropZone,
   Banner as PolarisBanner,
   Spinner,
 } from "@shopify/polaris";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import shopify, { authenticate } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { dispatchImageAutomation, dispatchImageStatus } from "../utils/automation.server";
 import { getPlanStorageLimitGB, getStorageUsageMB } from "../utils/storage.server";
@@ -38,7 +37,6 @@ import {
   ImageMagicIcon,
   UploadIcon,
   SearchIcon,
-  ClipboardIcon,
   QuestionCircleIcon,
   ViewIcon,
   MegaphoneIcon,
@@ -236,7 +234,7 @@ async function syncAllBannerMetaobjects(admin: any, shopId: string) {
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const shopParam = url.searchParams.get("shop") || undefined;
   const shop = session?.shop || shopParam;
@@ -295,13 +293,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     take: APP_GALLERY_PAGE_SIZE,
   });
 
-
-  const appImagesNextCursor =
-    appImages.length === APP_GALLERY_PAGE_SIZE ? appImages[appImages.length - 1].id : null;
-
   const storageUsedMB = await getStorageUsageMB(shopRecord.id);
   const defaultCountdownTimezone = shopRecord.defaultCountdownTimezone || "UTC";
-  const planLimits = getPlanLimits(shopRecord.plan);
 
   return json({
     shop: shopRecord.shopDomain,
@@ -419,7 +412,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       height: image.height,
       createdAt: image.createdAt.toISOString(),
     })),
-    appImagesNextCursor,
     shopifyProducts: [],
     shopifyFiles: [],
     productLoadError: null,
@@ -629,7 +621,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
     }
 
-    const updatedBanner = await db.banner.update({
+    await db.banner.update({
       where: { id: banner.id },
       data: {
         title: (formData.get("title") as string) || banner.title,
@@ -1670,13 +1662,9 @@ export default function BannerEdit() {
   const {
     shop,
     plan,
-    storageUsedMB,
-    storageLimitGB,
     banner,
     bannerItems,
-    analytics,
     appImages,
-    appImagesNextCursor,
     shopifyProducts,
     shopifyFiles,
     productLoadError,
@@ -1701,7 +1689,6 @@ export default function BannerEdit() {
   const videoFetcher = useFetcher();
   const reorderFetcher = useFetcher();
   const removeItemFetcher = useFetcher();
-  const deleteFetcher = useFetcher();
   const analyticsFetcher = useFetcher();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -1842,7 +1829,7 @@ export default function BannerEdit() {
   const [announcementCountdownEndAt, setAnnouncementCountdownEndAt] = useState(
     banner.announcementCountdownEndAt || ""
   );
-  const [announcementCountdownTimezone, setAnnouncementCountdownTimezone] = useState(
+  const [announcementCountdownTimezone] = useState(
     banner.announcementCountdownTimezone || defaultCountdownTimezone || "UTC"
   );
   const [announcementCountdownDurationHours, setAnnouncementCountdownDurationHours] = useState(
@@ -1924,10 +1911,6 @@ export default function BannerEdit() {
     if (endTime && nowTimestamp > endTime) return false;
     return true;
   };
-  const bannerVisibleNow =
-    statusValue === "active" &&
-    (!bannerScheduledEnabled ||
-      isWithinSchedule(bannerScheduledStartAt, bannerScheduledEndAt));
   const [itemTagsDraft, setItemTagsDraft] = useState<Record<string, any>>({});
   const [contentDragIndex, setContentDragIndex] = useState<number | null>(null);
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
@@ -1956,13 +1939,7 @@ export default function BannerEdit() {
   const [shopifyProductsState, setShopifyProductsState] = useState(shopifyProducts);
   const [shopifyFilesState, setShopifyFilesState] = useState(shopifyFiles);
   const [productLoadErrorState, setProductLoadErrorState] = useState(productLoadError);
-  const canUseSlider = true;
   const canSchedule = planHasFeature(plan, PlanFeature.SCHEDULING);
-
-  const storageUsageLabel = useMemo(() => {
-    const usedGB = storageUsedMB / 1024;
-    return `${usedGB.toFixed(2)} GB / ${storageLimitGB} GB`;
-  }, [storageUsedMB, storageLimitGB]);
 
   const attachedImageIds = useMemo(() => {
     return new Set(orderedItems.map((item) => item.imageId).filter(Boolean) as string[]);
@@ -2391,7 +2368,7 @@ export default function BannerEdit() {
       ...defaultTags,
       ...(itemEditor.tags || {}),
     });
-  }, [itemEditorOpen, itemEditor]);
+  }, [itemEditorOpen, itemEditor, defaultCountdownTimezone]);
 
   useEffect(() => {
     setShopifyProductsState(shopifyProducts);
@@ -2792,53 +2769,6 @@ export default function BannerEdit() {
       { action: "attach-image", imageId: uploadedImage.id },
       { method: "post" }
     );
-  };
-
-  const updateBannerItem = (
-    itemId: string,
-    data: {
-      showOverlay?: boolean;
-      showTextOverlay?: boolean;
-      textTitle?: string;
-      textDescription?: string;
-      showCta?: boolean;
-      ctaText?: string;
-      ctaUrl?: string;
-      ctaTarget?: string;
-      ctaMode?: string;
-    }
-  ) => {
-    const formData = new FormData();
-    formData.set("action", "update-banner-item");
-    formData.set("itemId", itemId);
-    if (data.showOverlay !== undefined) {
-      formData.set("showOverlay", data.showOverlay ? "true" : "false");
-    }
-    if (data.showTextOverlay !== undefined) {
-      formData.set("showTextOverlay", data.showTextOverlay ? "true" : "false");
-    }
-    if (data.textTitle !== undefined) {
-      formData.set("textTitle", data.textTitle);
-    }
-    if (data.textDescription !== undefined) {
-      formData.set("textDescription", data.textDescription);
-    }
-    if (data.showCta !== undefined) {
-      formData.set("showCta", data.showCta ? "true" : "false");
-    }
-    if (data.ctaText !== undefined) {
-      formData.set("ctaText", data.ctaText);
-    }
-    if (data.ctaUrl !== undefined) {
-      formData.set("ctaUrl", data.ctaUrl);
-    }
-    if (data.ctaTarget !== undefined) {
-      formData.set("ctaTarget", data.ctaTarget);
-    }
-    if (data.ctaMode !== undefined) {
-      formData.set("ctaMode", data.ctaMode);
-    }
-    itemUpdateFetcher.submit(formData, { method: "post" });
   };
 
   const handleUploadDrop = (files: File[]) => {
@@ -3941,7 +3871,7 @@ export default function BannerEdit() {
                   </DropZone>
                 ) : (
                   <div className="bainners-generated-preview">
-                    <img src={uploadedImage.url} alt="Uploaded image" />
+                    <img src={uploadedImage.url} alt="Uploaded preview" />
                   </div>
                 )}
                 {uploadFetcher.state !== "idle" && (
@@ -4266,7 +4196,7 @@ export default function BannerEdit() {
                   )}
                   {!modalBusy && generatedImage && (
                     <div className="bainners-generated-preview">
-                      <img src={generatedImage.url} alt="Generated image" />
+                      <img src={generatedImage.url} alt="Generated preview" />
                     </div>
                   )}
                   <div className="bainners-generate-actions">
@@ -4680,11 +4610,11 @@ export default function BannerEdit() {
                     checked={Boolean(itemTagsDraft.loop)}
                     onChange={(value) => updateItemTagsDraft({ loop: value })}
                   />
-                  <Checkbox
-                    label="Hide controls"
-                    checked={!Boolean(itemTagsDraft.showControls)}
-                    onChange={(value) => updateItemTagsDraft({ showControls: !value })}
-                  />
+                <Checkbox
+                  label="Hide controls"
+                  checked={!itemTagsDraft.showControls}
+                  onChange={(value) => updateItemTagsDraft({ showControls: !value })}
+                />
                 </BlockStack>
               ) : null}
               <Select

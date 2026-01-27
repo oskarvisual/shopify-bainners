@@ -1,8 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "c0e237097bd1358baa8c0d8b83a8f933"
-name = "bAInners – AI Image Banners"
-application_url = "https://example.com"
+name = "bAInners – AI Image & Announcement Banners"
+application_url = "https://app-bainners.orivisdev.shop"
 embedded = true
 
 [build]
@@ -20,6 +20,18 @@ api_version = "2026-01"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
+  [[webhooks.subscriptions]]
+  topics = [ "customers/data_request" ]
+  uri = "/webhooks/customers/data_request"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/redact" ]
+  uri = "/webhooks/customers/redact"
+
+  [[webhooks.subscriptions]]
+  topics = [ "shop/redact" ]
+  uri = "/webhooks/shop/redact"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_products,write_products,read_files,read_metaobjects,write_metaobjects,read_metaobject_definitions,write_metaobject_definitions"
@@ -28,13 +40,13 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://example.com/auth/callback",
-  "https://example.com/auth/shopify/callback",
-  "https://example.com/api/auth",
-  "https://example.com/api/auth/callback"
+  "https://app-bainners.orivisdev.shop/auth/callback",
+  "https://app-bainners.orivisdev.shop/auth/shopify/callback",
+  "https://app-bainners.orivisdev.shop/api/auth",
+  "https://app-bainners.orivisdev.shop/api/auth/callback"
 ]
 
 [app_proxy]
 prefix = "apps"
 subpath = "bainners"
-url = "https://example.com"
+url = "https://app-bainners.orivisdev.shop"

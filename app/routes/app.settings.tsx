@@ -381,7 +381,6 @@ export default function SettingsPage() {
     useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const syncFetcher = useFetcher();
-  const billingFetcher = useFetcher();
   const syncPlanFetcher = useFetcher();
   const plan = usePlan();
   const canUseTranslations = usePlanFeature(PlanFeature.SETTINGS_TRANSLATIONS);
@@ -426,45 +425,6 @@ export default function SettingsPage() {
     const shopifyBillingUrl = `https://admin.shopify.com/store/${shopDomain}/charges/${handle}/pricing_plans`;
     window.open(shopifyBillingUrl, "_blank");
     setShowSyncModal(true);
-  };
-
-  const renderUpgradeBanner = (message: string, targetPlans: string[]) => {
-    const plansToShow = targetPlans.filter((target) => !isAtLeastPlan(plan, target));
-    if (plansToShow.length === 0) {
-      return (
-        <Banner tone="warning" title="Upgrade required">
-          <Text as="p">{message}</Text>
-        </Banner>
-      );
-    }
-
-    return (
-      <Banner tone="warning" title="Upgrade required">
-        <BlockStack gap="200">
-          <Text as="p">{message}</Text>
-          <InlineStack gap="200">
-            {plansToShow.map((targetPlan) => {
-              const label =
-                getBillingButtonLabel(targetPlan) || `Upgrade to ${targetPlan.toUpperCase()}`;
-              const isProcessing =
-                billingFetcher.state === "submitting" &&
-                billingFetcher.formData?.get("plan") === targetPlan;
-              return (
-                <Button
-                  key={targetPlan}
-                  variant="primary"
-                  onClick={() => handleUpgrade(targetPlan)}
-                  loading={isProcessing}
-                  disabled={isProcessing}
-                >
-                  {label}
-                </Button>
-              );
-            })}
-          </InlineStack>
-        </BlockStack>
-      </Banner>
-    );
   };
 
   return (

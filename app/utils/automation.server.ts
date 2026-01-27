@@ -1,3 +1,10 @@
+import type {
+  BannerGenerationRequest,
+  N8nBannerPayload,
+  N8nBannerResponse,
+  AspectRatio,
+} from "~/types/banner";
+
 /**
  * Automation System for Bainners
  *
@@ -541,13 +548,6 @@ export async function deleteImageFromS3(params: {
 // ============================================
 // Complete Banner Generation Flow
 // ============================================
-
-import type {
-  BannerGenerationRequest,
-  N8nBannerPayload,
-  N8nBannerResponse,
-  AspectRatio,
-} from "~/types/banner";
 
 /**
  * Build complete system prompt with anti-injection protection

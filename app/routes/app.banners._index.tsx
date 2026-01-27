@@ -2,7 +2,6 @@ import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import {
   useLoaderData,
   Link,
-  useFetcher,
   useNavigate,
   useSearchParams,
   useLocation,
@@ -14,7 +13,6 @@ import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { getPlanStorageLimitGB } from "../utils/storage.server";
 import { BannerCreateModal } from "../components/BannerCreateModal";
-import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
 import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
 
 const METAOBJECT_TYPE = "bainners_banner";
@@ -206,7 +204,7 @@ async function syncAllBannerMetaobjects(admin: any, shopId: string) {
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   const url = new URL(request.url);
   const shopParam = url.searchParams.get("shop") || undefined;
@@ -361,7 +359,6 @@ export async function action({ request }: LoaderFunctionArgs) {
 
 export default function BannersIndex() {
   const { banners, sortBy, plan } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -370,18 +367,6 @@ export default function BannersIndex() {
   const createParams = new URLSearchParams(location.search);
   createParams.set("modal", "1");
   const createBannerAction = `/app/banners/new?${createParams.toString()}`;
-
-  const handleDelete = (bannerId: string) => {
-    if (confirm("Are you sure you want to delete this banner?")) {
-      fetcher.submit(
-        {
-          action: "delete",
-          bannerId,
-        },
-        { method: "post" }
-      );
-    }
-  };
 
   const handleSortChange = (value: string) => {
     const params = new URLSearchParams(searchParams);

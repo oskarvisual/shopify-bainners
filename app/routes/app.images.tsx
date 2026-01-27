@@ -14,7 +14,6 @@ import {
   Modal,
   Page,
   Text,
-  Thumbnail,
   Banner as PolarisBanner,
   Icon,
   ButtonGroup,

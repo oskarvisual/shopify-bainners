@@ -680,7 +680,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           } else {
             endTime = Date.parse(endRaw);
             if (!endTime || isNaN(endTime)) {
-              var match = String(endRaw).match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+              var match = String(endRaw).match(/([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2})/);
               if (match) {
                 endTime = new Date(
                   Number(match[1]),
