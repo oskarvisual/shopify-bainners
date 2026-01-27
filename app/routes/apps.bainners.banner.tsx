@@ -33,31 +33,20 @@ const COUNTDOWN_SIZE_MAP: Record<string, string> = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { liquid, session } = await authenticate.public.appProxy(request);
+  const { liquid } = await authenticate.public.appProxy(request);
   const url = new URL(request.url);
   const bannerId = url.searchParams.get("banner_id") || "";
-  const shop = session?.shop || url.searchParams.get("shop") || "";
 
-  if (!bannerId || !shop) {
-    return liquid(
-      "<div class='bainners-banner-empty'>Missing banner ID.</div>",
-      { status: 400 }
-    );
-  }
-
-  const shopRecord = await db.shop.findUnique({
-    where: { shopDomain: shop },
-  });
-
-  if (!shopRecord) {
-    return liquid("<div class='bainners-banner-empty'>Shop not found.</div>", {
-      status: 404,
+  if (!bannerId) {
+    return liquid("<div class='bainners-banner-empty'>Banner unavailable.</div>", {
+      status: 200,
     });
   }
 
   const banner = await db.banner.findFirst({
-    where: { id: bannerId, shopId: shopRecord.id, status: "active" },
+    where: { id: bannerId, status: "active" },
     include: {
+      shop: true,
       bannerItems: {
         orderBy: { displayOrder: "asc" },
         include: { image: true },
@@ -66,10 +55,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   });
 
   if (!banner) {
-    return liquid("<div class='bainners-banner-empty'>Banner not found.</div>", {
-      status: 404,
+    return liquid("<div class='bainners-banner-empty'>Banner unavailable.</div>", {
+      status: 200,
     });
   }
+
+  const shopRecord = banner.shop;
 
   const translations = {
     couponCopied: shopRecord.defaultTranslationCouponCopied || "Coupon copied",
