@@ -73,10 +73,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const translations = {
     couponCopied: shopRecord.defaultTranslationCouponCopied || "Coupon copied",
-    days: shopRecord.defaultTranslationDays || "Days",
-    hours: shopRecord.defaultTranslationHours || "Hours",
-    minutes: shopRecord.defaultTranslationMinutes || "Minutes",
-    seconds: shopRecord.defaultTranslationSeconds || "Seconds",
+    days: shopRecord.defaultTranslationDays || "d",
+    hours: shopRecord.defaultTranslationHours || "h",
+    minutes: shopRecord.defaultTranslationMinutes || "m",
+    seconds: shopRecord.defaultTranslationSeconds || "s",
   };
 
   const now = Date.now();
@@ -640,10 +640,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
           var endRaw = el.getAttribute("data-end") || "";
           var duration = parseFloat(el.getAttribute("data-duration") || "1");
           var showLabels = el.getAttribute("data-labels") === "1";
-          var labelDays = el.getAttribute("data-label-days") || "Days";
-          var labelHours = el.getAttribute("data-label-hours") || "Hours";
-          var labelMinutes = el.getAttribute("data-label-minutes") || "Minutes";
-          var labelSeconds = el.getAttribute("data-label-seconds") || "Seconds";
+          var labelDays = el.getAttribute("data-label-days") || "d";
+          var labelHours = el.getAttribute("data-label-hours") || "h";
+          var labelMinutes = el.getAttribute("data-label-minutes") || "m";
+          var labelSeconds = el.getAttribute("data-label-seconds") || "s";
           var endTime = null;
           if (mode === "evergreen") {
             var stored = el.getAttribute("data-evergreen-end");

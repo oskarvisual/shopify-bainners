@@ -193,10 +193,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
         shopRecord.defaultAnnouncementCouponBackgroundColor ||
         DEFAULT_SHOP_DEFAULTS.defaultAnnouncementCouponBackgroundColor,
       translationCouponCopied: shopRecord.defaultTranslationCouponCopied || "Coupon copied",
-      translationDays: shopRecord.defaultTranslationDays || "Days",
-      translationHours: shopRecord.defaultTranslationHours || "Hours",
-      translationMinutes: shopRecord.defaultTranslationMinutes || "Minutes",
-      translationSeconds: shopRecord.defaultTranslationSeconds || "Seconds",
+      translationDays: shopRecord.defaultTranslationDays || "d",
+      translationHours: shopRecord.defaultTranslationHours || "h",
+      translationMinutes: shopRecord.defaultTranslationMinutes || "m",
+      translationSeconds: shopRecord.defaultTranslationSeconds || "s",
     },
   });
 }

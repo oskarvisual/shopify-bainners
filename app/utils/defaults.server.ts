@@ -13,4 +13,8 @@ export const DEFAULT_SHOP_DEFAULTS = {
   defaultAnnouncementCouponTextColor: "#ff0000",
   defaultAnnouncementCouponBorderColor: "#ff0000",
   defaultAnnouncementCouponBackgroundColor: "",
+  defaultTranslationDays: "d",
+  defaultTranslationHours: "h",
+  defaultTranslationMinutes: "m",
+  defaultTranslationSeconds: "s",
 };
