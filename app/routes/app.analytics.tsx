@@ -5,6 +5,7 @@ import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { getSubscriptionPlanContext } from "../lib/plans.server";
 import { getPlanLimits, planHasFeature, PlanFeature } from "../lib/plans";
+import { AnalyticsLineChart } from "../components/AnalyticsLineChart";
 
 function startOfDay(date: Date) {
   const d = new Date(date);
@@ -162,8 +163,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function AnalyticsPage() {
   const { rangeDays, totals, chart, banners, items, plan } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const maxViews = chart.reduce((max, row) => Math.max(max, row.views), 1);
-  const maxClicks = chart.reduce((max, row) => Math.max(max, row.clicks), 1);
   const rangeOptions =
     plan === "ultra"
       ? [
@@ -236,63 +235,7 @@ export default function AnalyticsPage() {
               </InlineStack>
               {showAdvanced ? (
                 <BlockStack gap="200">
-                  <div className="bainners-analytics-chart">
-                    {chart.every((row) => row.views === 0 && row.clicks === 0) ? (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        No data yet.
-                      </Text>
-                    ) : (
-                      <svg viewBox="0 0 100 100" className="bainners-line-chart">
-                        {(() => {
-                          const maxValue = Math.max(maxViews, maxClicks, 1);
-                          const pointsViews = chart
-                            .map((row, index) => {
-                              const x = (index / Math.max(1, chart.length - 1)) * 100;
-                              const y = 100 - (row.views / maxValue) * 100;
-                              return `${x},${y}`;
-                            })
-                            .join(" ");
-                          const pointsClicks = chart
-                            .map((row, index) => {
-                              const x = (index / Math.max(1, chart.length - 1)) * 100;
-                              const y = 100 - (row.clicks / maxValue) * 100;
-                              return `${x},${y}`;
-                            })
-                            .join(" ");
-                          return (
-                            <>
-                              <polyline
-                                fill="none"
-                                stroke="#111827"
-                                strokeWidth="2"
-                                points={pointsViews}
-                              />
-                              <polyline
-                                fill="none"
-                                stroke="#0f766e"
-                                strokeWidth="2"
-                                points={pointsClicks}
-                              />
-                            </>
-                          );
-                        })()}
-                      </svg>
-                    )}
-                  </div>
-                  <InlineStack gap="200">
-                    <InlineStack gap="100" blockAlign="center">
-                      <span className="bainners-legend-dot bainners-legend-dot--views" />
-                      <Text as="span" variant="bodySm">
-                        Views
-                      </Text>
-                    </InlineStack>
-                    <InlineStack gap="100" blockAlign="center">
-                      <span className="bainners-legend-dot bainners-legend-dot--clicks" />
-                      <Text as="span" variant="bodySm">
-                        Clicks
-                      </Text>
-                    </InlineStack>
-                  </InlineStack>
+                  <AnalyticsLineChart data={chart} />
                 </BlockStack>
               ) : (
                 <Banner tone="warning" title="Upgrade required">

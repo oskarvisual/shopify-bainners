@@ -133,8 +133,8 @@
   display: flex;
   gap: 8px;
   align-items: stretch;
-  height: 160px;
-  padding: 8px 4px;
+  height: 220px;
+  padding: 12px 8px;
   background: #f6f6f7;
   border-radius: 12px;
 }
