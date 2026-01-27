@@ -141,7 +141,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     upgradeStatus,
     upgradePlan,
     planUpdated,
-    billingHandle: process.env.SHOPIFY_APP_HANDLE || "bainners",
+    billingHandle: process.env.SHOPIFY_APP_HANDLE || "bainners-ai-image-banners",
     defaults: {
       bannerBackgroundColor:
         shopRecord.defaultBannerBackgroundColor || DEFAULT_SHOP_DEFAULTS.defaultBannerBackgroundColor,
@@ -421,7 +421,7 @@ export default function SettingsPage() {
     const billingPlan = getBillingPlan(targetPlan);
     if (!billingPlan) return;
     const shopDomain = (shop || "").replace(".myshopify.com", "");
-    const handle = billingHandle || "bainners";
+    const handle = billingHandle || "bainners-ai-image-banners";
     const shopifyBillingUrl = `https://admin.shopify.com/store/${shopDomain}/charges/${handle}/pricing_plans`;
     window.open(shopifyBillingUrl, "_blank");
     setShowSyncModal(true);
