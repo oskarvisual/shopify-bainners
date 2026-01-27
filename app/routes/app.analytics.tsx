@@ -163,6 +163,7 @@ export default function AnalyticsPage() {
   const { rangeDays, totals, chart, banners, items, plan } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const maxViews = chart.reduce((max, row) => Math.max(max, row.views), 1);
+  const maxClicks = chart.reduce((max, row) => Math.max(max, row.clicks), 1);
   const rangeOptions =
     plan === "ultra"
       ? [
@@ -234,22 +235,65 @@ export default function AnalyticsPage() {
                 ) : null}
               </InlineStack>
               {showAdvanced ? (
-                <div className="bainners-analytics-chart">
-                  {chart.map((row) => (
-                    <div key={row.date} className="bainners-analytics-bar">
-                      <div
-                        className="bainners-analytics-bar-fill"
-                        style={{
-                          height:
-                            row.views === 0
-                              ? "0%"
-                              : `${Math.max(2, Math.round((row.views / maxViews) * 100))}%`,
-                        }}
-                      />
-                      <span>{row.date.slice(5)}</span>
-                    </div>
-                  ))}
-                </div>
+                <BlockStack gap="200">
+                  <div className="bainners-analytics-chart">
+                    {chart.every((row) => row.views === 0 && row.clicks === 0) ? (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        No data yet.
+                      </Text>
+                    ) : (
+                      <svg viewBox="0 0 100 100" className="bainners-line-chart">
+                        {(() => {
+                          const maxValue = Math.max(maxViews, maxClicks, 1);
+                          const pointsViews = chart
+                            .map((row, index) => {
+                              const x = (index / Math.max(1, chart.length - 1)) * 100;
+                              const y = 100 - (row.views / maxValue) * 100;
+                              return `${x},${y}`;
+                            })
+                            .join(" ");
+                          const pointsClicks = chart
+                            .map((row, index) => {
+                              const x = (index / Math.max(1, chart.length - 1)) * 100;
+                              const y = 100 - (row.clicks / maxValue) * 100;
+                              return `${x},${y}`;
+                            })
+                            .join(" ");
+                          return (
+                            <>
+                              <polyline
+                                fill="none"
+                                stroke="#111827"
+                                strokeWidth="2"
+                                points={pointsViews}
+                              />
+                              <polyline
+                                fill="none"
+                                stroke="#0f766e"
+                                strokeWidth="2"
+                                points={pointsClicks}
+                              />
+                            </>
+                          );
+                        })()}
+                      </svg>
+                    )}
+                  </div>
+                  <InlineStack gap="200">
+                    <InlineStack gap="100" blockAlign="center">
+                      <span className="bainners-legend-dot bainners-legend-dot--views" />
+                      <Text as="span" variant="bodySm">
+                        Views
+                      </Text>
+                    </InlineStack>
+                    <InlineStack gap="100" blockAlign="center">
+                      <span className="bainners-legend-dot bainners-legend-dot--clicks" />
+                      <Text as="span" variant="bodySm">
+                        Clicks
+                      </Text>
+                    </InlineStack>
+                  </InlineStack>
+                </BlockStack>
               ) : (
                 <Banner tone="warning" title="Upgrade required">
                   <Text as="p">

@@ -2471,22 +2471,43 @@ export default function BannerEdit() {
 
   useEffect(() => {
     if (!bannerAnalyticsOpen) return;
+    if (analyticsFetcher.state !== "idle") return;
+    if (
+      bannerAnalytics &&
+      String(bannerAnalytics.rangeDays) === String(analyticsRange)
+    ) {
+      return;
+    }
     const formData = new FormData();
     formData.set("action", "get-analytics");
     formData.set("scope", "banner");
     formData.set("range", analyticsRange);
     analyticsFetcher.submit(formData, { method: "post" });
-  }, [bannerAnalyticsOpen, analyticsRange, analyticsFetcher]);
+  }, [bannerAnalyticsOpen, analyticsRange, analyticsFetcher, bannerAnalytics]);
 
   useEffect(() => {
     if (!itemAnalyticsOpen || !selectedAnalyticsItemId) return;
+    if (analyticsFetcher.state !== "idle") return;
+    if (
+      itemAnalytics &&
+      itemAnalytics.itemId === selectedAnalyticsItemId &&
+      String(itemAnalytics.rangeDays) === String(analyticsRange)
+    ) {
+      return;
+    }
     const formData = new FormData();
     formData.set("action", "get-analytics");
     formData.set("scope", "item");
     formData.set("itemId", selectedAnalyticsItemId);
     formData.set("range", analyticsRange);
     analyticsFetcher.submit(formData, { method: "post" });
-  }, [itemAnalyticsOpen, analyticsRange, analyticsFetcher, selectedAnalyticsItemId]);
+  }, [
+    itemAnalyticsOpen,
+    analyticsRange,
+    analyticsFetcher,
+    selectedAnalyticsItemId,
+    itemAnalytics,
+  ]);
 
   useEffect(() => {
     if (!analyticsFetcher.data || typeof analyticsFetcher.data !== "object") return;
@@ -4710,33 +4731,70 @@ export default function BannerEdit() {
             </InlineStack>
             {plan !== "free" ? (
               <div className="bainners-analytics-chart">
-                {(bannerAnalytics?.chart || []).map((row: any) => (
-                  <div key={row.date} className="bainners-analytics-bar">
-                    <div
-                      className="bainners-analytics-bar-fill"
-                      style={{
-                        height:
-                          row.views === 0
-                            ? "0%"
-                            : `${Math.max(
-                                2,
-                                Math.round(
-                                  (row.views /
-                                    Math.max(
-                                      1,
-                                      ...(bannerAnalytics?.chart || []).map(
-                                        (entry: any) => entry.views
-                                      )
-                                    )) *
-                                    100
-                                )
-                              )}%`,
-                      }}
-                    />
-                    <span>{String(row.date || "").slice(5)}</span>
-                  </div>
-                ))}
+                {(bannerAnalytics?.chart || []).every(
+                  (row: any) => row.views === 0 && row.clicks === 0
+                ) ? (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No data yet.
+                  </Text>
+                ) : (
+                  <svg viewBox="0 0 100 100" className="bainners-line-chart">
+                    {(() => {
+                      const chart = bannerAnalytics?.chart || [];
+                      const maxValue = Math.max(
+                        1,
+                        ...chart.map((entry: any) => Math.max(entry.views, entry.clicks))
+                      );
+                      const pointsViews = chart
+                        .map((row: any, index: number) => {
+                          const x = (index / Math.max(1, chart.length - 1)) * 100;
+                          const y = 100 - (row.views / maxValue) * 100;
+                          return `${x},${y}`;
+                        })
+                        .join(" ");
+                      const pointsClicks = chart
+                        .map((row: any, index: number) => {
+                          const x = (index / Math.max(1, chart.length - 1)) * 100;
+                          const y = 100 - (row.clicks / maxValue) * 100;
+                          return `${x},${y}`;
+                        })
+                        .join(" ");
+                      return (
+                        <>
+                          <polyline
+                            fill="none"
+                            stroke="#111827"
+                            strokeWidth="2"
+                            points={pointsViews}
+                          />
+                          <polyline
+                            fill="none"
+                            stroke="#0f766e"
+                            strokeWidth="2"
+                            points={pointsClicks}
+                          />
+                        </>
+                      );
+                    })()}
+                  </svg>
+                )}
               </div>
+            ) : null}
+            {plan !== "free" ? (
+              <InlineStack gap="200">
+                <InlineStack gap="100" blockAlign="center">
+                  <span className="bainners-legend-dot bainners-legend-dot--views" />
+                  <Text as="span" variant="bodySm">
+                    Views
+                  </Text>
+                </InlineStack>
+                <InlineStack gap="100" blockAlign="center">
+                  <span className="bainners-legend-dot bainners-legend-dot--clicks" />
+                  <Text as="span" variant="bodySm">
+                    Clicks
+                  </Text>
+                </InlineStack>
+              </InlineStack>
             ) : null}
           </BlockStack>
         </Modal.Section>
@@ -4798,33 +4856,70 @@ export default function BannerEdit() {
             </InlineStack>
             {plan !== "free" ? (
               <div className="bainners-analytics-chart">
-                {(itemAnalytics?.chart || []).map((row: any) => (
-                  <div key={row.date} className="bainners-analytics-bar">
-                    <div
-                      className="bainners-analytics-bar-fill"
-                      style={{
-                        height:
-                          row.views === 0
-                            ? "0%"
-                            : `${Math.max(
-                                2,
-                                Math.round(
-                                  (row.views /
-                                    Math.max(
-                                      1,
-                                      ...(itemAnalytics?.chart || []).map(
-                                        (entry: any) => entry.views
-                                      )
-                                    )) *
-                                    100
-                                )
-                              )}%`,
-                      }}
-                    />
-                    <span>{String(row.date || "").slice(5)}</span>
-                  </div>
-                ))}
+                {(itemAnalytics?.chart || []).every(
+                  (row: any) => row.views === 0 && row.clicks === 0
+                ) ? (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No data yet.
+                  </Text>
+                ) : (
+                  <svg viewBox="0 0 100 100" className="bainners-line-chart">
+                    {(() => {
+                      const chart = itemAnalytics?.chart || [];
+                      const maxValue = Math.max(
+                        1,
+                        ...chart.map((entry: any) => Math.max(entry.views, entry.clicks))
+                      );
+                      const pointsViews = chart
+                        .map((row: any, index: number) => {
+                          const x = (index / Math.max(1, chart.length - 1)) * 100;
+                          const y = 100 - (row.views / maxValue) * 100;
+                          return `${x},${y}`;
+                        })
+                        .join(" ");
+                      const pointsClicks = chart
+                        .map((row: any, index: number) => {
+                          const x = (index / Math.max(1, chart.length - 1)) * 100;
+                          const y = 100 - (row.clicks / maxValue) * 100;
+                          return `${x},${y}`;
+                        })
+                        .join(" ");
+                      return (
+                        <>
+                          <polyline
+                            fill="none"
+                            stroke="#111827"
+                            strokeWidth="2"
+                            points={pointsViews}
+                          />
+                          <polyline
+                            fill="none"
+                            stroke="#0f766e"
+                            strokeWidth="2"
+                            points={pointsClicks}
+                          />
+                        </>
+                      );
+                    })()}
+                  </svg>
+                )}
               </div>
+            ) : null}
+            {plan !== "free" ? (
+              <InlineStack gap="200">
+                <InlineStack gap="100" blockAlign="center">
+                  <span className="bainners-legend-dot bainners-legend-dot--views" />
+                  <Text as="span" variant="bodySm">
+                    Views
+                  </Text>
+                </InlineStack>
+                <InlineStack gap="100" blockAlign="center">
+                  <span className="bainners-legend-dot bainners-legend-dot--clicks" />
+                  <Text as="span" variant="bodySm">
+                    Clicks
+                  </Text>
+                </InlineStack>
+              </InlineStack>
             ) : null}
           </BlockStack>
         </Modal.Section>

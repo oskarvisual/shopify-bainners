@@ -582,6 +582,23 @@
   background: linear-gradient(180deg, #0f766e 0%, #6ee7b7 100%);
 }
 
+.bainners-line-chart {
+  width: 100%;
+  height: 160px;
+}
+
+.bainners-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #111827;
+  display: inline-block;
+}
+
+.bainners-legend-dot--clicks {
+  background: #0f766e;
+}
+
 .bainners-disabled {
   opacity: 0.5;
   pointer-events: none;
