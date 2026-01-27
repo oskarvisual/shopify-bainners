@@ -1,4 +1,5 @@
 import { PassThrough } from "stream";
+import { webcrypto } from "node:crypto";
 import { renderToPipeableStream } from "react-dom/server";
 import { RemixServer } from "@remix-run/react";
 import {
@@ -9,6 +10,10 @@ import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 
 export const streamTimeout = 5000;
+
+if (!globalThis.crypto) {
+  (globalThis as any).crypto = webcrypto;
+}
 
 export default async function handleRequest(
   request: Request,
