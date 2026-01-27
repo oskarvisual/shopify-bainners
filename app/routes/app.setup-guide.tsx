@@ -53,7 +53,14 @@ export default function SetupGuide() {
                 </Text>
               </BlockStack>
               <InlineStack gap="200">
-                <Button url={videoUrl || undefined} external disabled={!videoUrl}>
+                <Button
+                  disabled={!videoUrl}
+                  onClick={() => {
+                    if (videoUrl) {
+                      window.open(videoUrl, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                >
                   Open video tutorial
                 </Button>
                 <Button url={backToDashboard} variant="tertiary">
@@ -226,10 +233,24 @@ export default function SetupGuide() {
                 Reach out any time or browse our documentation.
               </Text>
               <InlineStack gap="200">
-                <Button url={contactUrl || undefined} external disabled={!contactUrl}>
+                <Button
+                  disabled={!contactUrl}
+                  onClick={() => {
+                    if (contactUrl) {
+                      window.open(contactUrl, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                >
                   Contact support
                 </Button>
-                <Button url={docsUrl || undefined} external disabled={!docsUrl}>
+                <Button
+                  disabled={!docsUrl}
+                  onClick={() => {
+                    if (docsUrl) {
+                      window.open(docsUrl, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                >
                   View documentation
                 </Button>
               </InlineStack>
