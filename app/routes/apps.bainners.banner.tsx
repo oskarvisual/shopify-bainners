@@ -1,5 +1,4 @@
 import { type LoaderFunctionArgs } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { planHasFeature, PlanFeature } from "../lib/plans";
 
@@ -33,13 +32,13 @@ const COUNTDOWN_SIZE_MAP: Record<string, string> = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { liquid } = await authenticate.public.appProxy(request);
   const url = new URL(request.url);
   const bannerId = url.searchParams.get("banner_id") || "";
 
   if (!bannerId) {
-    return liquid("<div class='bainners-banner-empty'>Banner unavailable.</div>", {
+    return new Response("<div class='bainners-banner-empty'>Banner unavailable.</div>", {
       status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
     });
   }
 
@@ -55,8 +54,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   });
 
   if (!banner) {
-    return liquid("<div class='bainners-banner-empty'>Banner unavailable.</div>", {
+    return new Response("<div class='bainners-banner-empty'>Banner unavailable.</div>", {
       status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
     });
   }
 
@@ -90,11 +90,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
     const totalViews = monthlyViews._sum.views || 0;
     if (totalViews >= 20000) {
-      return liquid("", { status: 200 });
+      return new Response("", { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
     }
   }
   if (canSchedule && !isWithinSchedule(banner.scheduledStartAt, banner.scheduledEndAt)) {
-    return liquid("", { status: 200 });
+    return new Response("", { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
   }
 
   const items = banner.bannerItems.filter((item) =>
@@ -104,7 +104,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     items.find((item) => item.isSelected) || items[0] || null;
 
   if (!selectedItem && banner.layout !== "announcement") {
-    return liquid("<div class='bainners-banner-empty'>No images yet.</div>");
+    return new Response("<div class='bainners-banner-empty'>No images yet.</div>", {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
   }
 
   const titleSize =
@@ -856,5 +859,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     </script>
   `;
 
-  return liquid(html);
+  return new Response(html, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
 }
