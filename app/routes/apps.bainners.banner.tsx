@@ -33,10 +33,10 @@ const COUNTDOWN_SIZE_MAP: Record<string, string> = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { liquid } = await authenticate.public.appProxy(request);
+  const { liquid, session } = await authenticate.public.appProxy(request);
   const url = new URL(request.url);
   const bannerId = url.searchParams.get("banner_id") || "";
-  const shop = url.searchParams.get("shop") || "";
+  const shop = session?.shop || url.searchParams.get("shop") || "";
 
   if (!bannerId || !shop) {
     return liquid(
