@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "c0e237097bd1358baa8c0d8b83a8f933"
-name = "bAInners – AI Image & Announcement Banners"
+name = "bAInners – AI Image Banners"
 application_url = "https://app-bainners.orivisdev.shop"
 embedded = true
 
@@ -21,15 +21,15 @@ api_version = "2026-01"
   uri = "/webhooks/app/scopes_update"
 
   [[webhooks.subscriptions]]
-  topics = [ "customers/data_request" ]
+  compliance_topics = [ "customers/data_request" ]
   uri = "/webhooks/customers/data_request"
 
   [[webhooks.subscriptions]]
-  topics = [ "customers/redact" ]
+  compliance_topics = [ "customers/redact" ]
   uri = "/webhooks/customers/redact"
 
   [[webhooks.subscriptions]]
-  topics = [ "shop/redact" ]
+  compliance_topics = [ "shop/redact" ]
   uri = "/webhooks/shop/redact"
 
 [access_scopes]
