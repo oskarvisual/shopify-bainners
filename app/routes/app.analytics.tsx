@@ -240,7 +240,10 @@ export default function AnalyticsPage() {
                       <div
                         className="bainners-analytics-bar-fill"
                         style={{
-                          height: `${Math.round((row.views / maxViews) * 100)}%`,
+                          height:
+                            row.views === 0
+                              ? "0%"
+                              : `${Math.max(2, Math.round((row.views / maxViews) * 100))}%`,
                         }}
                       />
                       <span>{row.date.slice(5)}</span>

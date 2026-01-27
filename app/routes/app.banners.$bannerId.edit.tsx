@@ -4715,14 +4715,22 @@ export default function BannerEdit() {
                     <div
                       className="bainners-analytics-bar-fill"
                       style={{
-                        height: `${Math.round(
-                          (row.views /
-                            Math.max(
-                              1,
-                              ...(bannerAnalytics?.chart || []).map((entry: any) => entry.views)
-                            )) *
-                            100
-                        )}%`,
+                        height:
+                          row.views === 0
+                            ? "0%"
+                            : `${Math.max(
+                                2,
+                                Math.round(
+                                  (row.views /
+                                    Math.max(
+                                      1,
+                                      ...(bannerAnalytics?.chart || []).map(
+                                        (entry: any) => entry.views
+                                      )
+                                    )) *
+                                    100
+                                )
+                              )}%`,
                       }}
                     />
                     <span>{String(row.date || "").slice(5)}</span>
@@ -4795,14 +4803,22 @@ export default function BannerEdit() {
                     <div
                       className="bainners-analytics-bar-fill"
                       style={{
-                        height: `${Math.round(
-                          (row.views /
-                            Math.max(
-                              1,
-                              ...(itemAnalytics?.chart || []).map((entry: any) => entry.views)
-                            )) *
-                            100
-                        )}%`,
+                        height:
+                          row.views === 0
+                            ? "0%"
+                            : `${Math.max(
+                                2,
+                                Math.round(
+                                  (row.views /
+                                    Math.max(
+                                      1,
+                                      ...(itemAnalytics?.chart || []).map(
+                                        (entry: any) => entry.views
+                                      )
+                                    )) *
+                                    100
+                                )
+                              )}%`,
                       }}
                     />
                     <span>{String(row.date || "").slice(5)}</span>

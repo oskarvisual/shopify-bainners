@@ -461,11 +461,21 @@ export default function Index() {
                         <div className="bainners-analytics-bar-group">
                           <div
                             className="bainners-analytics-bar-fill"
-                            style={{ height: `${Math.round((row.views / maxViews) * 100)}%` }}
+                            style={{
+                              height:
+                                row.views === 0
+                                  ? "0%"
+                                  : `${Math.max(2, Math.round((row.views / maxViews) * 100))}%`,
+                            }}
                           />
                           <div
                             className="bainners-analytics-bar-fill bainners-analytics-bar-fill--clicks"
-                            style={{ height: `${Math.round((row.clicks / maxClicks) * 100)}%` }}
+                            style={{
+                              height:
+                                row.clicks === 0
+                                  ? "0%"
+                                  : `${Math.max(2, Math.round((row.clicks / maxClicks) * 100))}%`,
+                            }}
                           />
                         </div>
                         <span>{row.date.slice(5)}</span>
