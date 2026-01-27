@@ -171,6 +171,23 @@
   font-size: 13px;
 }
 
+.bainners-analytics-item-cell {
+  width: 160px;
+}
+
+.bainners-analytics-title {
+  min-width: 240px;
+}
+
+.bainners-analytics-link {
+  color: #111827;
+  text-decoration: none;
+}
+
+.bainners-analytics-link:hover {
+  text-decoration: underline;
+}
+
 .bainners-option-card {
   border: 1px solid var(--p-color-border-secondary);
   border-radius: var(--p-border-radius-400);

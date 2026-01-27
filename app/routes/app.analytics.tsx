@@ -1,5 +1,5 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useSearchParams } from "@remix-run/react";
+import { Link, useLoaderData, useLocation, useSearchParams } from "@remix-run/react";
 import { useState } from "react";
 import {
   Badge,
@@ -201,6 +201,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function AnalyticsPage() {
   const { rangeDays, totals, chart, banners, items, plan } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const editSearch = location.search || "";
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
   const [previewVideo, setPreviewVideo] = useState<{ url: string; title: string } | null>(null);
   const rangeOptions =
@@ -309,7 +311,7 @@ export default function AnalyticsPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Banner</th>
+                      <th className="bainners-analytics-title">Banner</th>
                       <th>Status</th>
                       <th>Layout</th>
                       <th>Views</th>
@@ -320,7 +322,11 @@ export default function AnalyticsPage() {
                   <tbody>
                     {banners.map((row) => (
                       <tr key={row.id}>
-                        <td>{row.title}</td>
+                        <td className="bainners-analytics-title">
+                          <Link className="bainners-analytics-link" to={`/app/banners/${row.id}/edit${editSearch}`}>
+                            {row.title}
+                          </Link>
+                        </td>
                         <td>
                           <Badge tone={row.status === "active" ? "success" : "info"}>
                             {row.status}
@@ -351,8 +357,8 @@ export default function AnalyticsPage() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Item</th>
-                        <th>Banner</th>
+                        <th className="bainners-analytics-item-cell">Item</th>
+                        <th className="bainners-analytics-title">Banner</th>
                         <th>Views</th>
                         <th>Clicks</th>
                         <th>CTR</th>
@@ -361,7 +367,7 @@ export default function AnalyticsPage() {
                     <tbody>
                       {items.map((row: any) => (
                         <tr key={row.id}>
-                          <td>
+                          <td className="bainners-analytics-item-cell">
                             {row.mediaType === "video" ? (
                               <button
                                 type="button"
@@ -407,7 +413,11 @@ export default function AnalyticsPage() {
                               </button>
                             )}
                           </td>
-                          <td>{row.bannerTitle}</td>
+                          <td className="bainners-analytics-title">
+                            <Link className="bainners-analytics-link" to={`/app/banners/${row.bannerId}/edit${editSearch}`}>
+                              {row.bannerTitle}
+                            </Link>
+                          </td>
                           <td>{row.views}</td>
                           <td>{row.clicks}</td>
                           <td>{row.ctr.toFixed(2)}%</td>

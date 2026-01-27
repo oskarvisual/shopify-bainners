@@ -361,7 +361,7 @@ export default function Index() {
                 <input type="hidden" name="action" value="start-setup-guide" />
                 <BlockStack gap="200">
                   <Text as="p" variant="bodyMd">
-                    Get started by installing the Q&A blocks on your product pages.
+                    Get started by installing the bAInners blocks on your product pages.
                     Follow our step-by-step guide to complete the setup in just 5 minutes.
                   </Text>
                   <div className="bainners-setup-cta">
