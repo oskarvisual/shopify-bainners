@@ -516,23 +516,25 @@ export default function SettingsPage() {
                   Current plan: {plan.toUpperCase()}
                 </Text>
               </BlockStack>
-              <InlineStack gap="200">
-                {!isAtLeastPlan(plan, SubscriptionPlan.PRO) ? (
-                  <Button variant="primary" onClick={() => handleUpgrade(SubscriptionPlan.PRO)}>
-                    {getBillingButtonLabel(SubscriptionPlan.PRO) || "Upgrade to Pro"}
-                  </Button>
-                ) : null}
-                {!isAtLeastPlan(plan, SubscriptionPlan.ULTRA) ? (
-                  <Button variant="primary" onClick={() => handleUpgrade(SubscriptionPlan.ULTRA)}>
-                    {getBillingButtonLabel(SubscriptionPlan.ULTRA) || "Upgrade to Ultra"}
-                  </Button>
-                ) : null}
+              <BlockStack gap="200">
+                <InlineStack gap="200">
+                  {!isAtLeastPlan(plan, SubscriptionPlan.PRO) ? (
+                    <Button variant="primary" onClick={() => handleUpgrade(SubscriptionPlan.PRO)}>
+                      {getBillingButtonLabel(SubscriptionPlan.PRO) || "Upgrade to Pro"}
+                    </Button>
+                  ) : null}
+                  {!isAtLeastPlan(plan, SubscriptionPlan.ULTRA) ? (
+                    <Button variant="primary" onClick={() => handleUpgrade(SubscriptionPlan.ULTRA)}>
+                      {getBillingButtonLabel(SubscriptionPlan.ULTRA) || "Upgrade to Ultra"}
+                    </Button>
+                  ) : null}
+                </InlineStack>
                 {isAtLeastPlan(plan, SubscriptionPlan.ULTRA) ? (
                   <Banner tone="success" title="You’re on the top plan">
                     <Text as="p">All features are unlocked.</Text>
                   </Banner>
                 ) : null}
-              </InlineStack>
+              </BlockStack>
             </BlockStack>
           </Card>
         </Layout.Section>

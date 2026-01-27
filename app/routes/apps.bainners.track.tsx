@@ -1,5 +1,4 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 
 function detectDevice(userAgent: string | null) {
@@ -9,14 +8,6 @@ function detectDevice(userAgent: string | null) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session } = await authenticate.public.appProxy(request);
-  const url = new URL(request.url);
-  const shop = session?.shop || url.searchParams.get("shop") || "";
-
-  if (!shop) {
-    return json({ success: false, error: "Missing shop" }, { status: 400 });
-  }
-
   let payload: Record<string, any> = {};
   const contentType = request.headers.get("content-type") || "";
   try {
@@ -38,18 +29,12 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ success: false, error: "Missing banner_id or event_type" }, { status: 400 });
   }
 
-  const shopRecord = await db.shop.findUnique({
-    where: { shopDomain: shop },
-  });
-  if (!shopRecord) {
-    return json({ success: false, error: "Shop not found" }, { status: 404 });
-  }
-
   const banner = await db.banner.findFirst({
-    where: { id: bannerId, shopId: shopRecord.id },
+    where: { id: bannerId },
+    select: { id: true, shopId: true },
   });
   if (!banner) {
-    return json({ success: false, error: "Banner not found" }, { status: 404 });
+    return json({ success: true });
   }
 
   let itemId: string | null = null;
@@ -80,7 +65,7 @@ export async function action({ request }: ActionFunctionArgs) {
       clicks: isClick ? { increment: 1 } : undefined,
     },
     create: {
-      shopId: shopRecord.id,
+      shopId: banner.shopId,
       bannerId: banner.id,
       date,
       views: isView ? 1 : 0,
@@ -102,7 +87,7 @@ export async function action({ request }: ActionFunctionArgs) {
         clicks: isClick ? { increment: 1 } : undefined,
       },
       create: {
-        shopId: shopRecord.id,
+        shopId: banner.shopId,
         bannerItemId: itemId,
         date,
         views: isView ? 1 : 0,
@@ -140,7 +125,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   await db.bannerEvent.create({
     data: {
-      shopId: shopRecord.id,
+      shopId: banner.shopId,
       bannerId: banner.id,
       bannerItemId: itemId,
       eventType,

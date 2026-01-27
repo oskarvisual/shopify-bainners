@@ -536,7 +536,7 @@ export default function Index() {
         title="Plan updated"
         primaryAction={{
           content: "Got it",
-          onAction: () => setShowPlanModal(false),
+          onAction: () => window.location.reload(),
         }}
       >
         <Modal.Section>
