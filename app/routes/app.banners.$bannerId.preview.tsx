@@ -560,6 +560,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             border-radius: 8px;
             font-size: var(--bainners-countdown-size, 14px);
           }
+          .bainners-countdown--expired {
+            opacity: 0.5;
+            cursor: not-allowed;
+          }
           .bainners-countdown--outline { background: transparent; border: 1px solid var(--bainners-countdown-color, #111111); }
           .bainners-countdown--pill { border-radius: 999px; }
           .bainners-countdown--text { background: transparent; padding: 0; }
@@ -694,7 +698,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           }
           if (!endTime || isNaN(endTime)) return;
           var diff = endTime - Date.now();
+          var expired = diff <= 0;
           if (diff < 0) diff = 0;
+          el.classList.toggle("bainners-countdown--expired", expired);
           var target = el.querySelector(".bainners-countdown-value");
           if (!target) return;
           var days = Math.floor(diff / 86400000);
