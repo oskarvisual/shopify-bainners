@@ -344,9 +344,13 @@ export async function action({ request }: LoaderFunctionArgs) {
       return json({ success: false, error: "Shop not found" }, { status: 404 });
     }
 
-    await db.banner.delete({
+    const deleted = await db.banner.deleteMany({
       where: { id: bannerId, shopId: shopRecord.id },
     });
+
+    if (deleted.count === 0) {
+      return json({ success: false, error: "Banner not found" }, { status: 404 });
+    }
 
     // Sync metaobjects after deleting banner
     await syncAllBannerMetaobjects(admin, shopRecord.id);

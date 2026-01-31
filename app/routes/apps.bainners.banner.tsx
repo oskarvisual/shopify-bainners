@@ -522,7 +522,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         align-items: center;
         white-space: nowrap;
         width: max-content;
-        animation: bainners-marquee 4s linear infinite;
+        animation: bainners-marquee 5s linear infinite;
         will-change: transform;
         transform: translate3d(0,0,0);
       }

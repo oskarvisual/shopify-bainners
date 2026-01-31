@@ -1452,7 +1452,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (action === "delete-banner") {
     await db.banner.delete({
-      where: { id: banner.id, shopId: shopRecord.id },
+      where: { id: banner.id },
     });
 
     // Sync metaobjects after deleting banner
