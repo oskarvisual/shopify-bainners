@@ -4307,7 +4307,25 @@ export default function BannerEdit() {
       var id = el.getAttribute('data-banner-id');
       fetch('/apps/bainners/banner?banner_id=' + encodeURIComponent(id))
         .then(function (res) { return res.text(); })
-        .then(function (html) { el.innerHTML = html; })
+        .then(function (html) {
+          var wrapper = document.createElement('div');
+          wrapper.innerHTML = html;
+          el.innerHTML = '';
+          while (wrapper.firstChild) {
+            var node = wrapper.firstChild;
+            if (node.nodeName === 'SCRIPT') {
+              var script = document.createElement('script');
+              Array.prototype.slice.call(node.attributes).forEach(function (attr) {
+                script.setAttribute(attr.name, attr.value);
+              });
+              script.text = node.text || node.textContent || '';
+              wrapper.removeChild(node);
+              el.appendChild(script);
+            } else {
+              el.appendChild(node);
+            }
+          }
+        })
         .catch(function () { el.innerHTML = 'Unable to load banner.'; });
     });
   })();
@@ -4320,7 +4338,7 @@ export default function BannerEdit() {
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(
-                        `<bainners-banner data-banner-id="${banner.id}"></bainners-banner>\n<script>\n  (function () {\n    var banners = document.querySelectorAll('bainners-banner[data-banner-id]');\n    banners.forEach(function (el) {\n      var id = el.getAttribute('data-banner-id');\n      fetch('/apps/bainners/banner?banner_id=' + encodeURIComponent(id))\n        .then(function (res) { return res.text(); })\n        .then(function (html) { el.innerHTML = html; })\n        .catch(function () { el.innerHTML = 'Unable to load banner.'; });\n    });\n  })();\n</script>`
+                        `<bainners-banner data-banner-id="${banner.id}"></bainners-banner>\n<script>\n  (function () {\n    var banners = document.querySelectorAll('bainners-banner[data-banner-id]');\n    banners.forEach(function (el) {\n      var id = el.getAttribute('data-banner-id');\n      fetch('/apps/bainners/banner?banner_id=' + encodeURIComponent(id))\n        .then(function (res) { return res.text(); })\n        .then(function (html) {\n          var wrapper = document.createElement('div');\n          wrapper.innerHTML = html;\n          el.innerHTML = '';\n          while (wrapper.firstChild) {\n            var node = wrapper.firstChild;\n            if (node.nodeName === 'SCRIPT') {\n              var script = document.createElement('script');\n              Array.prototype.slice.call(node.attributes).forEach(function (attr) {\n                script.setAttribute(attr.name, attr.value);\n              });\n              script.text = node.text || node.textContent || '';\n              wrapper.removeChild(node);\n              el.appendChild(script);\n            } else {\n              el.appendChild(node);\n            }\n          }\n        })\n        .catch(function () { el.innerHTML = 'Unable to load banner.'; });\n    });\n  })();\n</script>`
                       );
                       setCopiedEmbedHtml(true);
                       setTimeout(() => setCopiedEmbedHtml(false), 2000);
