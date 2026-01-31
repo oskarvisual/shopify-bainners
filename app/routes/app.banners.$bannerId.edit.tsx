@@ -1,4 +1,4 @@
-import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
+import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useFetcher, useLoaderData, useLocation } from "@remix-run/react";
 import {
   Badge,
@@ -1459,7 +1459,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
     await syncAllBannerMetaobjects(admin, shopRecord.id);
 
     const redirectUrl = new URL("/app/banners", request.url);
-    redirectUrl.search = url.search;
+    const redirectParams = new URLSearchParams(url.searchParams);
+    redirectParams.delete("_data");
+    redirectUrl.search = redirectParams.toString();
     return redirect(redirectUrl.toString());
   }
 
