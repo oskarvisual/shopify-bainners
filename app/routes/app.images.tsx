@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { deleteImageFromS3 } from "../utils/automation.server";
+import { getPlanStorageLimitGB } from "../utils/storage.server";
 import {
   Badge,
   BlockStack,
@@ -42,6 +43,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
   if (!shopRecord) {
     return json({ images: [], nextCursor: null, storageUsedGB: 0, storageLimitGB: 1 });
   }
+  let storageLimitGB = shopRecord.storageLimitGB;
+  const desiredStorageLimitGB = getPlanStorageLimitGB(shopRecord.plan);
+  if (storageLimitGB !== desiredStorageLimitGB) {
+    await db.shop.update({
+      where: { shopDomain: shop },
+      data: { storageLimitGB: desiredStorageLimitGB },
+    });
+    storageLimitGB = desiredStorageLimitGB;
+  }
 
   const images = await db.image.findMany({
     where: { shopId: shopRecord.id },
@@ -68,7 +78,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     })),
     nextCursor,
     storageUsedGB: shopRecord.storageUsedGB,
-    storageLimitGB: shopRecord.storageLimitGB,
+    storageLimitGB,
   });
 }
 

@@ -19,6 +19,7 @@ import { db } from "../db.server";
 import { BannerCreateModal } from "../components/BannerCreateModal";
 import { AnalyticsLineChart } from "../components/AnalyticsLineChart";
 import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
+import { getPlanStorageLimitGB } from "../utils/storage.server";
 
 const METAOBJECT_TYPE = "bainners_banner";
 const ACTIVE_SUBSCRIPTIONS_QUERY = `
@@ -161,7 +162,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         data: {
           shopDomain: shop,
           plan: "free",
-          storageLimitGB: 1,
+          storageLimitGB: getPlanStorageLimitGB("free"),
           setupGuideDismissedAt: new Date(),
           ...DEFAULT_SHOP_DEFAULTS,
         },
@@ -237,13 +238,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }
       }
 
-      if (detectedPlan !== shopRecord.plan) {
+      const desiredStorageLimitGB = getPlanStorageLimitGB(detectedPlan);
+      if (
+        detectedPlan !== shopRecord.plan ||
+        shopRecord.storageLimitGB !== desiredStorageLimitGB
+      ) {
         await db.shop.update({
           where: { shopDomain: shop },
-          data: { plan: detectedPlan },
+          data: { plan: detectedPlan, storageLimitGB: desiredStorageLimitGB },
         });
-        planUpdated = true;
-        updatedPlanName = detectedPlan;
+        if (detectedPlan !== shopRecord.plan) {
+          planUpdated = true;
+          updatedPlanName = detectedPlan;
+        }
       }
     } catch (error) {
       console.error("[DASHBOARD AUTO-SYNC] Error syncing plan:", error);

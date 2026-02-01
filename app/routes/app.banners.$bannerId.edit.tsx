@@ -262,6 +262,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       },
     });
   }
+  let storageLimitGB = shopRecord.storageLimitGB;
+  const desiredStorageLimitGB = getPlanStorageLimitGB(shopRecord.plan);
+  if (storageLimitGB !== desiredStorageLimitGB) {
+    await db.shop.update({
+      where: { shopDomain: shop },
+      data: { storageLimitGB: desiredStorageLimitGB },
+    });
+    storageLimitGB = desiredStorageLimitGB;
+  }
 
   const banner = await db.banner.findFirst({
     where: { id: bannerId, shopId: shopRecord.id },
@@ -301,7 +310,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     shop: shopRecord.shopDomain,
     plan: shopRecord.plan,
     storageUsedMB,
-    storageLimitGB: shopRecord.storageLimitGB,
+    storageLimitGB,
     defaultCountdownTimezone,
     banner: {
       id: banner.id,

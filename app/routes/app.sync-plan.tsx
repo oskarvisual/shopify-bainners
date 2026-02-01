@@ -3,6 +3,7 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { normalizePlan } from "../lib/plans";
+import { getPlanStorageLimitGB } from "../utils/storage.server";
 
 const ACTIVE_SUBSCRIPTIONS_QUERY = `
   query GetActiveSubscriptions {
@@ -63,7 +64,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     await db.shop.update({
       where: { shopDomain: shop },
-      data: { plan: normalizedPlan },
+      data: { plan: normalizedPlan, storageLimitGB: getPlanStorageLimitGB(normalizedPlan) },
     });
 
     return redirect(`/app/settings?plan_updated=true&plan=${normalizedPlan}`);

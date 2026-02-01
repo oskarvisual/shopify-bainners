@@ -20,6 +20,7 @@ import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { syncAllBannerMetaobjects } from "../utils/metaobjects.server";
 import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
+import { getPlanStorageLimitGB } from "../utils/storage.server";
 import { getSubscriptionPlanContext } from "../lib/plans.server";
 import {
   PlanFeature,
@@ -127,7 +128,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       data: {
         shopDomain: shop,
         plan: "free",
-        storageLimitGB: 1,
+        storageLimitGB: getPlanStorageLimitGB("free"),
         ...DEFAULT_SHOP_DEFAULTS,
       },
     });
@@ -245,7 +246,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       await db.shop.update({
         where: { shopDomain: shop },
-        data: { plan: detectedPlan },
+        data: { plan: detectedPlan, storageLimitGB: getPlanStorageLimitGB(detectedPlan) },
       });
 
       return json({ success: true, plan: detectedPlan });
@@ -310,7 +311,7 @@ export async function action({ request }: ActionFunctionArgs) {
     create: {
       shopDomain: shop,
       plan: "free",
-      storageLimitGB: 1,
+      storageLimitGB: getPlanStorageLimitGB("free"),
       defaultBannerBackgroundColor: formData.get("bannerBackgroundColor") as string,
       defaultTitleFontSize: formData.get("titleFontSize") as string,
       defaultDescriptionFontSize: formData.get("descriptionFontSize") as string,
