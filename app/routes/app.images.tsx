@@ -155,6 +155,7 @@ export default function ImageGallery() {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [selectedImage, setSelectedImage] = useState<typeof images[number] | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (loadMoreFetcher.data?.images) {
@@ -170,6 +171,7 @@ export default function ImageGallery() {
         if (deletedId) {
           setItems((current) => current.filter((image) => image.id !== deletedId));
           setDeleteSuccess(true);
+          setPendingDeleteId(null);
           if (selectedImage?.id === deletedId) {
             setDetailsOpen(false);
             setSelectedImage(null);
@@ -199,6 +201,7 @@ export default function ImageGallery() {
   const openDetails = (image: typeof items[number]) => {
     setSelectedImage(image);
     setDetailsOpen(true);
+    setPendingDeleteId(image.id);
   };
 
   return (
@@ -360,7 +363,11 @@ export default function ImageGallery() {
       />
       <Modal
         open={detailsOpen}
-        onClose={() => setDetailsOpen(false)}
+        onClose={() => {
+          setDetailsOpen(false);
+          setSelectedImage(null);
+          setPendingDeleteId(null);
+        }}
         title={selectedImage?.filename || "Image details"}
         size="large"
       >
@@ -382,8 +389,17 @@ export default function ImageGallery() {
               <InlineStack align="start">
                 <deleteFetcher.Form method="post">
                   <input type="hidden" name="action" value="delete" />
-                  <input type="hidden" name="imageId" value={selectedImage.id} />
-                  <Button submit tone="critical" disabled={isDeleting}>
+                  <input
+                    type="hidden"
+                    name="imageId"
+                    value={pendingDeleteId || selectedImage.id}
+                  />
+                  <Button
+                    submit
+                    tone="critical"
+                    disabled={isDeleting}
+                    onClick={() => setDetailsOpen(false)}
+                  >
                     Delete image
                   </Button>
                 </deleteFetcher.Form>
