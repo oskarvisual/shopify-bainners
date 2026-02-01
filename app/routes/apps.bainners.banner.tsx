@@ -515,8 +515,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       .bainners-announcement { position: relative; display: flex; align-items: center; justify-content: center; text-align: center; gap: var(--bainners-announcement-gap, 16px); padding: 16px 48px 16px 24px; background: var(--bainners-banner-bg, #f6f6f7); color: var(--bainners-title-color, #111111); flex-wrap: wrap; }
       .bainners-announcement--stacked { flex-direction: column; align-items: center; text-align: center; }
       .bainners-announcement-text { font-weight: 600; font-size: var(--bainners-title-size, 16px); }
-      .bainners-announcement--marquee { display: grid; grid-template-columns: 1fr auto auto; align-items: center; column-gap: var(--bainners-announcement-gap, 16px); }
-      .bainners-announcement-text--marquee { overflow: hidden; white-space: nowrap; }
+      .bainners-announcement--marquee { display: flex; align-items: center; gap: var(--bainners-announcement-gap, 16px); }
+      .bainners-announcement-text--marquee { overflow: hidden; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
       .bainners-marquee-track {
         display: inline-flex;
         align-items: center;
