@@ -1031,6 +1031,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
       where: { shopId: shopRecord.id, storageUrl: n8nImage.imageUrl },
     });
 
+    const remoteMeta = await fetchRemoteImageMeta(n8nImage.imageUrl, n8nImage.filename);
+    const resolvedWidth = remoteMeta.width || n8nImage.width || 1920;
+    const resolvedHeight = remoteMeta.height || n8nImage.height || 1080;
+    const resolvedFormat =
+      remoteMeta.format ||
+      getFormatFromName(n8nImage.filename || n8nImage.imageUrl || "") ||
+      "png";
+    const resolvedAspectRatio =
+      aspectRatio || getAspectRatioFromDimensions(resolvedWidth, resolvedHeight) || "16:9";
+
     const image =
       existing ||
       (await db.image.create({
@@ -1039,10 +1049,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
           filename: n8nImage.filename || "generated-image.webp",
           storageUrl: n8nImage.imageUrl,
           sizeInMB,
-          width: n8nImage.width || 1920,
-          height: n8nImage.height || 1080,
-          aspectRatio: aspectRatio || "16:9",
-          format: "webp",
+          width: resolvedWidth,
+          height: resolvedHeight,
+          aspectRatio: resolvedAspectRatio,
+          format: resolvedFormat,
           sourceType: "ai_generated",
         },
       }));
@@ -1111,16 +1121,26 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     const sizeInMB = parseFilesize(n8nImage.filesize || imageFile.size / (1024 * 1024));
 
+    const remoteMeta = await fetchRemoteImageMeta(n8nImage.imageUrl, n8nImage.filename);
+    const resolvedWidth = remoteMeta.width || n8nImage.width || 1920;
+    const resolvedHeight = remoteMeta.height || n8nImage.height || 1080;
+    const resolvedFormat =
+      remoteMeta.format ||
+      getFormatFromName(n8nImage.filename || n8nImage.imageUrl || "") ||
+      "png";
+    const resolvedAspectRatio =
+      getAspectRatioFromDimensions(resolvedWidth, resolvedHeight) || "16:9";
+
     const image = await db.image.create({
       data: {
         shopId: shopRecord.id,
         filename: n8nImage.filename || imageFile.name,
         storageUrl: n8nImage.imageUrl,
         sizeInMB,
-        width: n8nImage.width || 1920,
-        height: n8nImage.height || 1080,
-        aspectRatio: "16:9",
-        format: "webp",
+        width: resolvedWidth,
+        height: resolvedHeight,
+        aspectRatio: resolvedAspectRatio,
+        format: resolvedFormat,
         sourceType: "uploaded",
       },
     });
@@ -1600,6 +1620,166 @@ function parseFilesize(filesizeStr: string | number): number {
   if (unit === "KB") return value / 1024;
   if (unit === "GB") return value * 1024;
   return value;
+}
+
+function getFormatFromName(value: string): string | null {
+  if (!value) return null;
+  const match = value.toLowerCase().match(/\.([a-z0-9]+)(?:\?|#|$)/);
+  if (!match) return null;
+  const ext = match[1];
+  if (ext === "jpeg") return "jpg";
+  return ext;
+}
+
+function getAspectRatioFromDimensions(width?: number, height?: number): string | null {
+  if (!width || !height) return null;
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const divisor = gcd(width, height);
+  return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
+}
+
+function detectFormatFromBuffer(buffer: Buffer): string | null {
+  if (buffer.length < 12) return null;
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return "png";
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+    return "jpg";
+  }
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+    return "gif";
+  }
+  if (
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    return "webp";
+  }
+  return null;
+}
+
+function getPngSize(buffer: Buffer): { width: number; height: number } | null {
+  if (buffer.length < 24) return null;
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+  };
+}
+
+function getGifSize(buffer: Buffer): { width: number; height: number } | null {
+  if (buffer.length < 10) return null;
+  return {
+    width: buffer.readUInt16LE(6),
+    height: buffer.readUInt16LE(8),
+  };
+}
+
+function getJpegSize(buffer: Buffer): { width: number; height: number } | null {
+  let offset = 2;
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = buffer[offset + 1];
+    const isSof =
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+    if (isSof) {
+      return {
+        height: buffer.readUInt16BE(offset + 5),
+        width: buffer.readUInt16BE(offset + 7),
+      };
+    }
+    const size = buffer.readUInt16BE(offset + 2);
+    if (!size) break;
+    offset += 2 + size;
+  }
+  return null;
+}
+
+function getWebpSize(buffer: Buffer): { width: number; height: number } | null {
+  if (buffer.length < 30) return null;
+  const chunkType = buffer.toString("ascii", 12, 16);
+  const dataOffset = 20;
+  if (chunkType === "VP8X") {
+    const width =
+      1 + (buffer[24] | (buffer[25] << 8) | (buffer[26] << 16));
+    const height =
+      1 + (buffer[27] | (buffer[28] << 8) | (buffer[29] << 16));
+    return { width, height };
+  }
+  if (chunkType === "VP8 ") {
+    if (buffer.length < dataOffset + 10) return null;
+    return {
+      width: buffer.readUInt16LE(dataOffset + 6),
+      height: buffer.readUInt16LE(dataOffset + 8),
+    };
+  }
+  if (chunkType === "VP8L") {
+    if (buffer.length < dataOffset + 5) return null;
+    const b0 = buffer[dataOffset + 1];
+    const b1 = buffer[dataOffset + 2];
+    const b2 = buffer[dataOffset + 3];
+    const b3 = buffer[dataOffset + 4];
+    const width = 1 + (((b0 & 0x3f) << 8) | buffer[dataOffset]);
+    const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6));
+    return { width, height };
+  }
+  return null;
+}
+
+async function fetchRemoteImageMeta(url: string, filename?: string): Promise<{
+  width?: number;
+  height?: number;
+  format?: string;
+}> {
+  if (!url) return {};
+  try {
+    let response = await fetch(url, { headers: { Range: "bytes=0-65535" } });
+    if (!response.ok) {
+      response = await fetch(url);
+    }
+    if (!response.ok) {
+      console.warn("[fetchRemoteImageMeta] Failed to fetch image metadata", {
+        url,
+        status: response.status,
+      });
+      return {};
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const format = getFormatFromName(filename || url) || detectFormatFromBuffer(buffer);
+    let size: { width: number; height: number } | null = null;
+    if (format === "png") size = getPngSize(buffer);
+    else if (format === "gif") size = getGifSize(buffer);
+    else if (format === "jpg" || format === "jpeg") size = getJpegSize(buffer);
+    else if (format === "webp") size = getWebpSize(buffer);
+    else {
+      size =
+        getPngSize(buffer) || getGifSize(buffer) || getJpegSize(buffer) || getWebpSize(buffer);
+    }
+    return {
+      format: format || undefined,
+      width: size?.width,
+      height: size?.height,
+    };
+  } catch {
+    console.warn("[fetchRemoteImageMeta] Error while reading image metadata", { url });
+    return {};
+  }
 }
 
 function extractN8nImage(data: any): {
