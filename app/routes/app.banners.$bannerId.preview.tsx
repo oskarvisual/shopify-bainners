@@ -154,11 +154,29 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     banner.countdownStyle || "solid"
   }`;
 
+  const showAnnouncementText = banner.announcementShowText !== false;
+  const showAnnouncementCta =
+    banner.announcementShowCta !== false && Boolean(banner.announcementCtaText);
+  const showAnnouncementCoupon = Boolean(
+    banner.announcementShowCoupon && banner.announcementCouponCode
+  );
+  const showAnnouncementCountdown = Boolean(banner.announcementShowCountdown);
+  const marqueeExtraCount = [showAnnouncementCta, showAnnouncementCoupon, showAnnouncementCountdown]
+    .filter(Boolean)
+    .length;
+  const marqueeModifier =
+    banner.announcementLayout !== "stacked" &&
+    banner.announcementMarquee &&
+    marqueeExtraCount > 0
+      ? `bainners-announcement--marquee-${1 + marqueeExtraCount}`
+      : "";
+
   const announcementClasses = [
     "bainners-announcement",
     banner.announcementLayout !== "stacked" && banner.announcementMarquee
       ? "bainners-announcement--marquee"
       : "",
+    marqueeModifier,
     banner.announcementAnimation && banner.announcementAnimation !== "none"
       ? `bainners-announcement--${banner.announcementAnimation}`
       : "",
@@ -331,8 +349,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           const announcementOrder = Array.isArray(banner.announcementContentOrder)
             ? banner.announcementContentOrder
             : ["text", "cta", "countdown"];
-          const showAnnouncementText = banner.announcementShowText !== false;
-          const showAnnouncementCta = banner.announcementShowCta !== false;
           const useMarquee =
             banner.announcementLayout !== "stacked" && banner.announcementMarquee;
           const baseAnnouncementText = escapeHtml(banner.announcementText || "");
@@ -492,8 +508,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           .bainners-announcement { position: relative; display: flex; align-items: center; justify-content: center; text-align: center; gap: var(--bainners-announcement-gap, 16px); padding: 16px 48px 16px 24px; background: var(--bainners-banner-bg, #f6f6f7); color: var(--bainners-title-color, #111111); flex-wrap: wrap; }
           .bainners-announcement--stacked { flex-direction: column; align-items: center; text-align: center; }
           .bainners-announcement-text { font-weight: 600; font-size: var(--bainners-title-size, 16px); }
-          .bainners-announcement--marquee { display: flex; align-items: center; gap: var(--bainners-announcement-gap, 16px); }
-          .bainners-announcement-text--marquee { overflow: hidden; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
+          .bainners-announcement--marquee { display: grid; grid-template-columns: 1fr; align-items: center; column-gap: var(--bainners-announcement-gap, 16px); }
+          .bainners-announcement--marquee-2 { grid-template-columns: 1fr auto; }
+          .bainners-announcement--marquee-3 { grid-template-columns: 1fr auto auto; }
+          .bainners-announcement--marquee-4 { grid-template-columns: 1fr auto auto auto; }
+          .bainners-announcement-text--marquee { overflow: hidden; white-space: nowrap; }
           .bainners-marquee-track {
             display: inline-flex;
             align-items: center;
