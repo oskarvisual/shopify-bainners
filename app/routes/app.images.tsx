@@ -170,12 +170,16 @@ export default function ImageGallery() {
         if (deletedId) {
           setItems((current) => current.filter((image) => image.id !== deletedId));
           setDeleteSuccess(true);
+          if (selectedImage?.id === deletedId) {
+            setDetailsOpen(false);
+            setSelectedImage(null);
+          }
         }
       } else if (deleteFetcher.data.error) {
         setDeleteError(deleteFetcher.data.error);
       }
     }
-  }, [deleteFetcher.data, deleteFetcher.formData]);
+  }, [deleteFetcher.data, deleteFetcher.formData, selectedImage?.id]);
 
   const isLoadingMore = loadMoreFetcher.state !== "idle";
   const isDeleting = deleteFetcher.state !== "idle";
