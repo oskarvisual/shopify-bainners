@@ -864,6 +864,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
     if (!prompt) {
       return json({ success: false, error: "Prompt is required." }, { status: 400 });
     }
+    if (!getAllowedAspectRatios(shopRecord.plan).includes(aspectRatio)) {
+      return json({ success: false, error: "Aspect ratio not allowed for plan." }, { status: 400 });
+    }
 
     const referenceImages: string[] = [];
     if (characterImageId) {
@@ -954,6 +957,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const productImageUrl = (formData.get("productImageUrl") as string) || "";
     const productId = (formData.get("productId") as string) || "";
     const productTitle = (formData.get("productTitle") as string) || "";
+    if (!getAllowedAspectRatios(shopRecord.plan).includes(aspectRatio)) {
+      return json({ success: false, error: "Aspect ratio not allowed for plan." }, { status: 400 });
+    }
 
     const referenceImages: string[] = [];
     if (characterImageId) {
@@ -1620,6 +1626,13 @@ function parseFilesize(filesizeStr: string | number): number {
   if (unit === "KB") return value / 1024;
   if (unit === "GB") return value * 1024;
   return value;
+}
+
+function getAllowedAspectRatios(plan?: string): string[] {
+  if (plan === "free") {
+    return ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "auto"];
+  }
+  return ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"];
 }
 
 function getFormatFromName(value: string): string | null {
@@ -2474,19 +2487,7 @@ export default function BannerEdit() {
     { id: "minimal", label: "Minimal" },
   ];
 
-  const aspectRatioOptions = [
-    "1:1",
-    "2:3",
-    "3:2",
-    "3:4",
-    "4:3",
-    "4:5",
-    "5:4",
-    "9:16",
-    "16:9",
-    "21:9",
-    "auto",
-  ];
+  const aspectRatioOptions = getAllowedAspectRatios(plan);
 
   const resolutionOptions =
     plan === "ultra" ? ["1K", "2K", "4K"] : plan === "pro" ? ["1K", "2K"] : ["1K"];
