@@ -12,6 +12,17 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+function sanitizeCustomCssBlock(rawValue: unknown, maxLength = 20000) {
+  const value = String(rawValue ?? "").trim();
+  if (!value) return "";
+
+  return value
+    .split(String.fromCharCode(0)).join("")
+    .slice(0, maxLength)
+    .replace(/<\/style/gi, "<\\/style")
+    .replace(/<\/script/gi, "<\\/script");
+}
+
 const TITLE_SIZE_MAP: Record<string, string> = {
   sm: "20px",
   md: "24px",
@@ -422,6 +433,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         })()
       : renderItem(selectedItem);
 
+  const customCss = sanitizeCustomCssBlock(banner.customCss);
+
   const html = `
     <!doctype html>
     <html>
@@ -626,6 +639,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-4px); }
           }
+          ${customCss}
         </style>
       </head>
       <body>

@@ -12,6 +12,45 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+function sanitizeHref(rawValue: unknown, fallback = "#") {
+  const value = String(rawValue ?? "").trim();
+  if (!value) return fallback;
+
+  // Allow anchors and relative storefront paths.
+  if (
+    value.startsWith("#") ||
+    value.startsWith("/") ||
+    value.startsWith("./") ||
+    value.startsWith("../") ||
+    value.startsWith("?")
+  ) {
+    return value;
+  }
+
+  try {
+    const url = new URL(value);
+    const protocol = url.protocol.toLowerCase();
+    if (protocol === "http:" || protocol === "https:" || protocol === "mailto:" || protocol === "tel:") {
+      return value;
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
+}
+
+function sanitizeCustomCssBlock(rawValue: unknown, maxLength = 20000) {
+  const value = String(rawValue ?? "").trim();
+  if (!value) return "";
+
+  return value
+    .split(String.fromCharCode(0)).join("")
+    .slice(0, maxLength)
+    .replace(/<\/style/gi, "<\\/style")
+    .replace(/<\/script/gi, "<\\/script");
+}
+
 const TITLE_SIZE_MAP: Record<string, string> = {
   sm: "20px",
   md: "24px",
@@ -237,7 +276,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const textTitle = tags.textTitle || "";
     const textDescription = tags.textDescription || "";
     const ctaText = tags.ctaText || "";
-    const ctaUrl = tags.ctaUrl || "#";
+    const ctaUrl = sanitizeHref(tags.ctaUrl, "#");
     const ctaTarget = tags.ctaTarget || "_self";
     const ctaMode = tags.ctaMode || "button";
     const itemClickable = showCta && ctaMode === "item" && ctaUrl;
@@ -404,8 +443,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
                   : `<span class="bainners-announcement-text">${baseAnnouncementText}</span>`;
               }
               if (key === "cta" && showAnnouncementCta && banner.announcementCtaText) {
+                const announcementCtaUrl = sanitizeHref(banner.announcementCtaUrl, "#");
                 return `<a class="${ctaClasses}" href="${escapeHtml(
-                  banner.announcementCtaUrl || "#"
+                  announcementCtaUrl
                 )}" target="${escapeHtml(
                   banner.announcementCtaTarget || "_self"
                 )}" rel="${
@@ -462,6 +502,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
             </div>`;
         })()
       : renderItem(selectedItem);
+
+  const customCss = sanitizeCustomCssBlock(banner.customCss);
 
   const html = `
     <div class="bainners-banner bainners-banner--${escapeHtml(
@@ -674,6 +716,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-4px); }
       }
+      ${customCss}
     </style>
     <script>
       (function () {

@@ -48,6 +48,12 @@ import {
 const APP_GALLERY_PAGE_SIZE = 12;
 const METAOBJECT_TYPE = "bainners_banner";
 
+function sanitizeCustomCssInput(rawValue: unknown, maxLength = 20000) {
+  const value = String(rawValue ?? "").trim();
+  if (!value) return null;
+  return value.split(String.fromCharCode(0)).join("").slice(0, maxLength);
+}
+
 async function ensureBannerMetaobjectDefinition(admin: any) {
   try {
     const existing = await admin.graphql(
@@ -810,7 +816,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         customCss: formData.has("customCss")
           ? shopRecord.plan === "free"
             ? null
-            : ((formData.get("customCss") as string) || null)
+            : sanitizeCustomCssInput(formData.get("customCss"))
           : banner.customCss,
         scheduledStartAt: formData.has("scheduledStartAt")
           ? planHasFeature(shopRecord.plan, PlanFeature.SCHEDULING)
