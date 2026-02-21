@@ -1,6 +1,7 @@
 import { type LoaderFunctionArgs } from "@remix-run/node";
 import { db } from "../db.server";
 import { planHasFeature, PlanFeature } from "../lib/plans";
+import { authenticate } from "../shopify.server";
 
 function escapeHtml(value: string) {
   return value
@@ -32,6 +33,34 @@ const COUNTDOWN_SIZE_MAP: Record<string, string> = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const { session } = await authenticate.public.appProxy(request);
+  if (!session?.shop) {
+    return new Response("<div class='bainners-banner-empty'>Banner unavailable.</div>", {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+
+  const shopRecord = await db.shop.findUnique({
+    where: { shopDomain: session.shop },
+    select: {
+      id: true,
+      plan: true,
+      defaultTranslationCouponCopied: true,
+      defaultTranslationDays: true,
+      defaultTranslationHours: true,
+      defaultTranslationMinutes: true,
+      defaultTranslationSeconds: true,
+    },
+  });
+
+  if (!shopRecord) {
+    return new Response("<div class='bainners-banner-empty'>Banner unavailable.</div>", {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+
   const url = new URL(request.url);
   const bannerId = url.searchParams.get("banner_id") || "";
 
@@ -43,9 +72,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   const banner = await db.banner.findFirst({
-    where: { id: bannerId, status: "active" },
+    where: { id: bannerId, status: "active", shopId: shopRecord.id },
     include: {
-      shop: true,
       bannerItems: {
         orderBy: { displayOrder: "asc" },
         include: { image: true },
@@ -59,9 +87,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
       headers: { "content-type": "text/html; charset=utf-8" },
     });
   }
-
-  const shopRecord = banner.shop;
-
   const translations = {
     couponCopied: shopRecord.defaultTranslationCouponCopied || "Coupon copied",
     days: shopRecord.defaultTranslationDays || "d",

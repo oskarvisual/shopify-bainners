@@ -1,5 +1,8 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { db } from "../db.server";
+import { authenticate } from "../shopify.server";
+
+const ALLOWED_EVENT_TYPES = new Set(["view", "click"]);
 
 function detectDevice(userAgent: string | null) {
   if (!userAgent) return "unknown";
@@ -8,6 +11,11 @@ function detectDevice(userAgent: string | null) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const { session } = await authenticate.public.appProxy(request);
+  if (!session?.shop) {
+    return new Response(null, { status: 401 });
+  }
+
   let payload: Record<string, any> = {};
   const contentType = request.headers.get("content-type") || "";
   try {
@@ -23,26 +31,41 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const bannerId = (payload.banner_id || payload.bannerId || "").toString();
   const bannerItemId = payload.banner_item_id || payload.bannerItemId || null;
-  const eventType = (payload.event_type || payload.eventType || "").toString();
+  const eventType = (payload.event_type || payload.eventType || "").toString().trim().toLowerCase();
 
   if (!bannerId || !eventType) {
     return json({ success: false, error: "Missing banner_id or event_type" }, { status: 400 });
   }
 
+  if (!ALLOWED_EVENT_TYPES.has(eventType)) {
+    return json({ success: false, error: "Invalid event_type" }, { status: 400 });
+  }
+
+  const shopRecord = await db.shop.findUnique({
+    where: { shopDomain: session.shop },
+    select: { id: true },
+  });
+  if (!shopRecord) {
+    return new Response(null, { status: 401 });
+  }
+
   const banner = await db.banner.findFirst({
-    where: { id: bannerId },
+    where: { id: bannerId, shopId: shopRecord.id },
     select: { id: true, shopId: true },
   });
   if (!banner) {
-    return json({ success: true });
+    return new Response(null, { status: 204 });
   }
 
   let itemId: string | null = null;
   if (bannerItemId) {
     const item = await db.bannerItem.findFirst({
-      where: { id: bannerItemId.toString(), bannerId: banner.id },
+      where: { id: bannerItemId.toString(), bannerId: banner.id, shopId: banner.shopId },
       select: { id: true },
     });
+    if (!item) {
+      return json({ success: false, error: "Invalid banner_item_id" }, { status: 400 });
+    }
     itemId = item?.id || null;
   }
 
@@ -137,5 +160,5 @@ export async function action({ request }: ActionFunctionArgs) {
     },
   });
 
-  return json({ success: true });
+  return new Response(null, { status: 204 });
 }

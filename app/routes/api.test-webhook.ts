@@ -9,13 +9,32 @@
  *   Body: { "action": "generate" | "upload" | "optimize" }
  */
 
-import { json, type ActionFunctionArgs } from "@remix-run/node";
+import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { generateBannerWithAI, uploadBannerImage, optimizeBannerImage } from "../utils/automation.server";
+import { authenticate } from "../shopify.server";
+
+const ALLOWED_TEST_ACTIONS = new Set(["generate", "upload", "optimize"]);
+
+function ensureDevOnly() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Response("Not Found", { status: 404 });
+  }
+}
 
 export async function action({ request }: ActionFunctionArgs) {
+  ensureDevOnly();
+  await authenticate.admin(request);
+
   try {
     const body = await request.json();
-    const { action = "generate" } = body;
+    const action = String(body?.action || "generate");
+
+    if (!ALLOWED_TEST_ACTIONS.has(action)) {
+      return json({
+        error: "Invalid action",
+        validActions: ["generate", "upload", "optimize"],
+      }, { status: 400 });
+    }
 
     const shop = "test-store.myshopify.com";
 
@@ -25,7 +44,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       const result = await generateBannerWithAI({
         shop: shop,
-        prompt: body.prompt || "a ninja reading twitter and getting surprise because japan lost world war 2",
+        prompt: body.prompt || "A clean ecommerce hero banner with modern lighting",
         aspect_ratio: body.aspect_ratio || "1:1",
         resolution: body.resolution || "1K",
         output_format: body.output_format || "png",
@@ -97,11 +116,6 @@ export async function action({ request }: ActionFunctionArgs) {
       });
     }
 
-    return json({
-      error: "Invalid action",
-      validActions: ["generate", "upload", "optimize"],
-    }, { status: 400 });
-
   } catch (error) {
     console.error("❌ Test webhook error:", error);
 
@@ -114,7 +128,10 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 // GET request to show test instructions
-export async function loader() {
+export async function loader({ request }: LoaderFunctionArgs) {
+  ensureDevOnly();
+  await authenticate.admin(request);
+
   return json({
     message: "Webhook Test Endpoint",
     instructions: {
@@ -125,7 +142,7 @@ export async function loader() {
           description: "Test AI image generation",
           example: {
             action: "generate",
-            prompt: "a ninja reading twitter and getting surprise because japan lost world war 2",
+            prompt: "A clean ecommerce hero banner with modern lighting",
             aspect_ratio: "1:1",
             resolution: "1K",
             output_format: "png",
@@ -152,9 +169,8 @@ export async function loader() {
       },
     },
     webhook: {
-      url: process.env.N8N_WEBHOOK_IMAGE_PROCESSOR,
+      configured: !!process.env.N8N_WEBHOOK_IMAGE_PROCESSOR,
       authenticated: !!process.env.AUTOMATIONS_TOKEN,
-      appId: process.env.AUTOMATIONS_APP_ID || "shopify-bainners",
     },
   });
 }
