@@ -1,0 +1,9 @@
+{
+  "bainners": {
+    "banner": {
+      "empty": "Select a published banner to display it here.",
+      "loading": "Loading banner...",
+      "error": "Unable to load banner."
+    }
+  }
+}
