@@ -4,16 +4,16 @@
 
 Shopify app for creating, managing, and displaying intelligent, responsive banners using AI-generated or user-uploaded images.
 
-## 🎯 Características Principales
+## 🎯 Key Features
 
-- **Generación de imágenes con IA** - Crea banners profesionales con prompts simples
-- **Gestión de imágenes** - Sube tus propias imágenes o usa las de tus productos de Shopify
-- **Estilos personalizados** (Ultra) - Crea presets de estilo para mantener branding consistente
-- **Analytics** (Pro+) - Visualizaciones, clicks y CTR de tus banners
-- **Límite por almacenamiento** - Planes basados en GB (imágenes generadas + subidas)
-- **Integración con Theme Editor** - Usa tus banners en cualquier parte de tu tienda
+- **AI image generation** - Create professional banners with simple prompts
+- **Image management** - Upload your own images or use images from your Shopify products
+- **Custom styles** (Ultra) - Create style presets for consistent branding
+- **Analytics** (Pro+) - Track banner views, clicks, and CTR
+- **Storage limits** - Plans based on GB (generated and uploaded images)
+- **Theme Editor integration** - Use your banners anywhere in your store
 
-## 🏗️ Arquitectura
+## 🏗️ Architecture
 
 ```
 ┌─────────────────┐
@@ -45,11 +45,11 @@ Shopify app for creating, managing, and displaying intelligent, responsive banne
    └─────────┘  └──────────┘  └───────────┘
 ```
 
-### Flujo de Imágenes
+### Image Flow
 
-1. **Imágenes generadas con IA**: App → n8n → AI API → S3 → App
-2. **Imágenes subidas por usuario**: App → n8n → S3 → App
-3. **Imágenes de productos Shopify**: App usa URL directamente (no se suben a S3)
+1. **AI-generated images**: App → n8n → AI API → S3 → App
+2. **User-uploaded images**: App → n8n → S3 → App
+3. **Shopify product images**: The app uses the URL directly (not uploaded to S3)
 
 ## 🛠️ Tech Stack
 
@@ -62,34 +62,34 @@ Shopify app for creating, managing, and displaying intelligent, responsive banne
 
 ## 📦 Database Schema
 
-### Modelos principales
+### Main models
 
-- `Shop` - Información de la tienda, plan, uso de almacenamiento
-- `Banner` - Banners con configuración completa (layout, CTA, texto, programación)
-- `BannerImage` - Imágenes con tracking de tamaño y origen
-- `Style` - Presets de estilo personalizados (feature Ultra)
-- `GenerationRequest` - Tracking de solicitudes de generación con IA
-- `BannerAnalytic` - Métricas de views, clicks y CTR (feature Pro+)
+- `Shop` - Store information, plan, and storage usage
+- `Banner` - Banners with complete configuration (layout, CTA, text, scheduling)
+- `BannerImage` - Images with size and source tracking
+- `Style` - Custom style presets (Ultra feature)
+- `GenerationRequest` - AI generation request tracking
+- `BannerAnalytic` - View, click, and CTR metrics (Pro+ feature)
 
-Ver `prisma/schema.prisma` para detalles completos.
+See `prisma/schema.prisma` for complete details.
 
 ## 🚀 Setup
 
-### 1. Instalar dependencias
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Configurar variables de entorno
+### 2. Configure environment variables
 
-Copia `.env.example` a `.env` y configura:
+Copy `.env.example` to `.env` and configure it:
 
 ```bash
 cp .env.example .env
 ```
 
-Variables requeridas:
+Required variables:
 - `SHOPIFY_API_KEY` - API key de tu app de Shopify
 - `SHOPIFY_API_SECRET` - API secret
 - `DATABASE_URL` - Conexión a MySQL local
@@ -97,32 +97,32 @@ Variables requeridas:
 - `N8N_TOKEN` - Token de autenticación para n8n
 - `SPACES_*` - Credenciales de DigitalOcean Spaces
 
-### 3. Crear y migrar la base de datos
+### 3. Create and migrate the database
 
 ```bash
-# Crear la base de datos
+# Create the database
 mysql -h 127.0.0.1 -P 3307 -u root -e "CREATE DATABASE bainners;"
 
-# Ejecutar migraciones
+# Run migrations
 npm run setup
 ```
 
-### 4. Iniciar servidor de desarrollo
+### 4. Start the development server
 
 ```bash
 npm run dev
 ```
 
-## 🔗 Integración con n8n
+## 🔗 n8n Integration
 
-La app se comunica con n8n mediante un webhook unificado que maneja:
-- Generación de imágenes con IA
-- Upload de imágenes a S3
-- Optimización de imágenes
+The app communicates with n8n through a unified webhook that handles:
+- AI image generation
+- Image uploads to S3
+- Image optimization
 
 Ver `docs/n8n-webhook-contract.md` para el contrato completo del API.
 
-### Ejemplo de uso
+### Usage example
 
 ```typescript
 import { generateImageWithAI } from "~/utils/n8n.server";
@@ -137,95 +137,95 @@ const result = await generateImageWithAI({
 });
 ```
 
-## 📊 Planes
+## 📊 Plans
 
 | Feature | Free | Pro | Ultra |
 |---------|------|-----|-------|
-| Almacenamiento | 1 GB | 10 GB | 50 GB |
+| Storage | 1 GB | 10 GB | 50 GB |
 | Banners activos | Ilimitados | Ilimitados | Ilimitados |
 | Analytics | ❌ | ✅ | ✅ |
-| Estilos personalizados | ❌ | ❌ | ✅ |
+| Custom styles | ❌ | ❌ | ✅ |
 | A/B Testing | ❌ | ❌ | ✅ |
 
-## 📁 Estructura del Proyecto
+## 📁 Project Structure
 
 ```
 ├── app/
-│   ├── routes/           # Rutas de Remix (páginas y APIs)
-│   ├── utils/            # Utilidades (n8n.server.ts, etc.)
-│   ├── shopify.server.ts # Configuración de Shopify App
-│   └── db.server.ts      # Cliente de Prisma
-├── docs/                 # Documentación técnica
+│   ├── routes/           # Remix routes (pages and APIs)
+│   ├── utils/            # Utilities (n8n.server.ts, etc.)
+│   ├── shopify.server.ts # Shopify app configuration
+│   └── db.server.ts      # Prisma client
+├── docs/                 # Technical documentation
 ├── prisma/
-│   ├── schema.prisma     # Schema de base de datos
-│   └── migrations/       # Migraciones
-├── extensions/           # Theme extensions (future)
-└── public/               # Assets estáticos
+│   ├── schema.prisma     # Database schema
+│   └── migrations/       # Migrations
+├── extensions/           # Theme extensions
+└── public/               # Static assets
 ```
 
-## 🎨 Flujo de Creación de Banner
+## 🎨 Banner Creation Flow
 
-1. Usuario selecciona estilo (system o custom)
-2. Configura contexto del banner (producto, colección)
-3. Escribe prompt describiendo lo que quiere
-4. Selecciona imagen de referencia (opcional):
-   - Imágenes de productos Shopify
-   - Subir imagen propia
-   - Sin referencia (generación libre)
-5. Define formato y dimensiones
-6. Configura texto y CTA
-7. Genera variantes (2-4)
-8. Selecciona variante favorita
-9. Publica banner en Theme Editor
+1. The user selects a style (system or custom)
+2. Configures the banner context (product or collection)
+3. Writes a prompt describing the desired result
+4. Selects an optional reference image:
+   - Shopify product image
+   - Upload a custom image
+   - No reference (free generation)
+5. Defines the format and dimensions
+6. Configures the text and CTA
+7. Generates variants (2–4)
+8. Selects a favorite variant
+9. Publishes the banner in the Theme Editor
 
-## 🔐 Seguridad
+## 🔐 Security
 
-- OAuth con Shopify
-- Session storage con Prisma
-- Token de autenticación para n8n webhooks
-- Validación de prompts anti-injection (en n8n)
-- CDN para servir imágenes
+- Shopify OAuth
+- Prisma session storage
+- Authentication token for n8n webhooks
+- Anti-injection prompt validation (in n8n)
+- CDN-based image delivery
 
 ## 📝 Scripts
 
 ```bash
-npm run dev          # Desarrollo con Shopify CLI
-npm run build        # Build para producción
-npm run start        # Servidor de producción
-npm run setup        # Generar Prisma client y migrar DB
-npm run deploy       # Deploy a Shopify
+npm run dev          # Development with Shopify CLI
+npm run build        # Production build
+npm run start        # Production server
+npm run setup        # Generate Prisma client and migrate the database
+npm run deploy       # Deploy to Shopify
 ```
 
 ## 🐛 Troubleshooting
 
-### Base de datos no existe
+### Database does not exist
 ```bash
 mysql -h 127.0.0.1 -P 3307 -u root -e "CREATE DATABASE bainners;"
 npx prisma migrate dev
 ```
 
-### n8n webhook no responde
-Verifica que:
-1. El webhook esté activo en n8n
-2. El token `N8N_TOKEN` sea correcto
-3. La URL `N8N_WEBHOOK_IMAGE_PROCESSOR` sea accesible
+### The n8n webhook does not respond
+Verify that:
+1. The webhook is active in n8n
+2. The `N8N_TOKEN` value is correct
+3. The `N8N_WEBHOOK_IMAGE_PROCESSOR` URL is reachable
 
-### Problemas con OAuth
+### OAuth issues
 ```bash
 npm run deploy
 ```
 
-## 📚 Recursos
+## 📚 Resources
 
 - [Shopify App Remix Docs](https://shopify.dev/docs/api/shopify-app-remix)
 - [Prisma Docs](https://www.prisma.io/docs)
 - [n8n Docs](https://docs.n8n.io)
 - [DigitalOcean Spaces Docs](https://docs.digitalocean.com/products/spaces/)
 
-## 🤝 Contribuir
+## 🤝 Contributing
 
-Este repositorio es público y sirve como referencia del proyecto. Para dudas, propuestas o reportes, abre un issue o contacta al equipo desde el [sitio oficial de Orivis](https://orivisdev.shop/).
+This repository is public and serves as a project reference. For questions, proposals, or bug reports, open an issue or contact the team through the [official Orivis website](https://orivisdev.shop/).
 
-## 📄 Licencia
+## 📄 License
 
-Actualmente el código se publica sin una licencia open source explícita. Todos los derechos quedan reservados salvo indicación distinta del propietario.
+The code is currently published without an explicit open-source license. All rights reserved unless otherwise stated by the owner.
