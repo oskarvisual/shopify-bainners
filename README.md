@@ -1,8 +1,8 @@
 # 🧠 bAInners – AI Image Banners
 
-[Sitio oficial de Orivis](https://orivisdev.shop/)
+[Official Orivis website](https://orivisdev.shop/)
 
-App de Shopify para crear, gestionar y mostrar banners inteligentes y responsivos usando imágenes generadas con IA o subidas por el usuario.
+Shopify app for creating, managing, and displaying intelligent, responsive banners using AI-generated or user-uploaded images.
 
 ## 🎯 Características Principales
 
