@@ -5,11 +5,11 @@ Este documento muestra **exactamente** qué JSON se envía a n8n en cada uno de 
 ## 🔐 Headers (Todos los casos)
 
 ```
-POST https://brain.orivisdev.shop/webhook-test/98bdf7c9-0b3f-4258-af4d-022386ca2a50
+POST https://brain.orivisdev.shop/webhook-test/REPLACE_WITH_WORKFLOW_ID
 
 Headers:
   Content-Type: application/json
-  Authorization: Bearer DbsRogxXcez5XcHj
+  Authorization: Bearer REPLACE_WITH_LOCAL_TOKEN
 ```
 
 ---

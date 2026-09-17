@@ -197,7 +197,7 @@ Igual que shopify-qa:
 ```typescript
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer DbsRogxXcez5XcHj"  // AUTOMATIONS_TOKEN
+  "Authorization": "Bearer REPLACE_WITH_LOCAL_TOKEN"  // AUTOMATIONS_TOKEN
 }
 ```
 
@@ -412,7 +412,7 @@ model BannerAnalytics {
 ┌─────────────────────────────────────────────────────────────┐
 │                    n8n WEBHOOK                              │
 │  URL: https://brain.orivisdev.shop/webhook-test/...        │
-│  Headers: Authorization: Bearer DbsRogxXcez5XcHj            │
+│  Headers: Authorization: Bearer REPLACE_WITH_LOCAL_TOKEN            │
 │  Body: Payload completo (ver N8N_PAYLOAD_STRUCTURE.md)     │
 └─────────────────────────────────────────────────────────────┘
                             ↓

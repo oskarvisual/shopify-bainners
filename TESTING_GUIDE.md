@@ -190,7 +190,7 @@ docker-compose up -d
 Solución: Verifica tu `.env`:
 
 ```env
-N8N_WEBHOOK_IMAGE_PROCESSOR=https://brain.orivisdev.shop/webhook-test/98bdf7c9-0b3f-4258-af4d-022386ca2a50
+N8N_WEBHOOK_IMAGE_PROCESSOR=https://brain.orivisdev.shop/webhook-test/REPLACE_WITH_WORKFLOW_ID
 ```
 
 ### Error: "n8n webhook failed: 401"
@@ -198,7 +198,7 @@ N8N_WEBHOOK_IMAGE_PROCESSOR=https://brain.orivisdev.shop/webhook-test/98bdf7c9-0
 Solución: Verifica el token en `.env`:
 
 ```env
-AUTOMATIONS_TOKEN=DbsRogxXcez5XcHj
+AUTOMATIONS_TOKEN=REPLACE_WITH_LOCAL_TOKEN
 ```
 
 Y que n8n esté configurado para aceptar ese Bearer token.

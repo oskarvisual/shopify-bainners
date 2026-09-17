@@ -186,7 +186,7 @@ Cuando el usuario clickea "Add Image" o "Edit" en una imagen existente:
 
 ```json
 // Payload enviado a n8n
-POST https://brain.orivisdev.shop/webhook-test/98bdf7c9-0b3f-4258-af4d-022386ca2a50
+POST https://brain.orivisdev.shop/webhook-test/REPLACE_WITH_WORKFLOW_ID
 
 {
   "appId": "shopify-bainners",
@@ -341,7 +341,7 @@ POST https://brain.orivisdev.shop/webhook-test/98bdf7c9-0b3f-4258-af4d-022386ca2
 
 ```json
 // Payload enviado a n8n
-POST https://brain.orivisdev.shop/webhook-test/98bdf7c9-0b3f-4258-af4d-022386ca2a50
+POST https://brain.orivisdev.shop/webhook-test/REPLACE_WITH_WORKFLOW_ID
 
 {
   "appId": "shopify-bainners",

@@ -8,8 +8,8 @@ Las variables de entorno ya están configuradas en `.env`:
 
 ```env
 AUTOMATIONS_APP_ID=shopify-bainners
-AUTOMATIONS_TOKEN=DbsRogxXcez5XcHj
-N8N_WEBHOOK_IMAGE_PROCESSOR=https://brain.orivisdev.shop/webhook-test/98bdf7c9-0b3f-4258-af4d-022386ca2a50
+AUTOMATIONS_TOKEN=REPLACE_WITH_LOCAL_TOKEN
+N8N_WEBHOOK_IMAGE_PROCESSOR=https://brain.orivisdev.shop/webhook-test/REPLACE_WITH_WORKFLOW_ID
 ```
 
 ## 2️⃣ Probar el Sistema
@@ -141,9 +141,9 @@ En n8n, crea un workflow:
 
 ```
 1. Webhook Trigger
-   - URL: /webhook-test/98bdf7c9-0b3f-4258-af4d-022386ca2a50
+   - URL: /webhook-test/REPLACE_WITH_WORKFLOW_ID
    - Method: POST
-   - Auth: Bearer Token (DbsRogxXcez5XcHj)
+   - Auth: Bearer Token (REPLACE_WITH_LOCAL_TOKEN)
 
 2. Switch Node
    - Condition: {{ $json.action }}
@@ -238,7 +238,7 @@ N8N_WEBHOOK_IMAGE_PROCESSOR=https://brain.orivisdev.shop/webhook-test/...
 
 Verifica que el token sea correcto:
 ```env
-AUTOMATIONS_TOKEN=DbsRogxXcez5XcHj
+AUTOMATIONS_TOKEN=REPLACE_WITH_LOCAL_TOKEN
 ```
 
 Y que n8n esté configurado para aceptar Bearer token.

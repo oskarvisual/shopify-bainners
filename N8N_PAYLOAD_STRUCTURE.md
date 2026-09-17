@@ -537,7 +537,7 @@ Todos los requests llevan:
 
 ```
 Content-Type: application/json
-Authorization: Bearer DbsRogxXcez5XcHj
+Authorization: Bearer REPLACE_WITH_LOCAL_TOKEN
 ```
 
 ## 🎯 Plan Limits

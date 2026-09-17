@@ -1,5 +1,7 @@
 # 🧠 bAInners – AI Image Banners
 
+[Sitio oficial de Orivis](https://orivisdev.shop/)
+
 App de Shopify para crear, gestionar y mostrar banners inteligentes y responsivos usando imágenes generadas con IA o subidas por el usuario.
 
 ## 🎯 Características Principales
@@ -222,8 +224,8 @@ npm run deploy
 
 ## 🤝 Contribuir
 
-Este es un proyecto privado. Para dudas o sugerencias, contactar al equipo de desarrollo.
+Este repositorio es público y sirve como referencia del proyecto. Para dudas, propuestas o reportes, abre un issue o contacta al equipo desde el [sitio oficial de Orivis](https://orivisdev.shop/).
 
 ## 📄 Licencia
 
-Propietario - Todos los derechos reservados
+Actualmente el código se publica sin una licencia open source explícita. Todos los derechos quedan reservados salvo indicación distinta del propietario.
