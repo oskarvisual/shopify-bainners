@@ -16,6 +16,7 @@
     "shopify": "shopify",
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
+    "validate:shopify-api": "graphql-codegen --config .graphqlrc.ts",
     "vite": "vite"
   },
   "type": "module",

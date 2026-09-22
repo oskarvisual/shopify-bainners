@@ -3,7 +3,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { SubscriptionPlan, getBillingPlan, normalizePlan } from "../lib/plans";
 
-const APP_SUBSCRIPTION_CREATE_MUTATION = `
+const APP_SUBSCRIPTION_CREATE_MUTATION = `#graphql
   mutation AppSubscriptionCreate($name: String!, $returnUrl: URL!, $test: Boolean!, $lineItems: [AppSubscriptionLineItemInput!]!) {
     appSubscriptionCreate(name: $name, returnUrl: $returnUrl, test: $test, lineItems: $lineItems) {
       userErrors {

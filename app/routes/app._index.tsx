@@ -22,8 +22,8 @@ import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
 import { getPlanStorageLimitGB } from "../utils/storage.server";
 
 const METAOBJECT_TYPE = "bainners_banner";
-const ACTIVE_SUBSCRIPTIONS_QUERY = `
-  query GetActiveSubscriptions {
+const ACTIVE_SUBSCRIPTIONS_QUERY = `#graphql
+  query HomeGetActiveSubscriptions {
     currentAppInstallation {
       activeSubscriptions {
         id
@@ -54,8 +54,8 @@ function startOfDay(date: Date) {
 async function ensureBannerMetaobjectDefinition(admin: any) {
   try {
     const existing = await admin.graphql(
-      `
-      query GetDefinition($type: String!) {
+      `#graphql
+      query HomeEnsureDefinition($type: String!) {
         metaobjectDefinitionByType(type: $type) {
           id
         }
@@ -73,8 +73,8 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
 
   try {
     const response = await admin.graphql(
-      `
-      mutation CreateDefinition($definition: MetaobjectDefinitionCreateInput!) {
+      `#graphql
+      mutation HomeCreateDefinition($definition: MetaobjectDefinitionCreateInput!) {
         metaobjectDefinitionCreate(definition: $definition) {
           metaobjectDefinition {
             id

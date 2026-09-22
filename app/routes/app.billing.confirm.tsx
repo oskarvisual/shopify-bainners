@@ -4,10 +4,10 @@ import { authenticate } from "../shopify.server";
 import { db } from "../db.server";
 import { SubscriptionPlan, getBillingPlan, normalizePlan } from "../lib/plans";
 
-const CURRENT_INSTALLATION_QUERY = `
+const CURRENT_INSTALLATION_QUERY = `#graphql
   query CurrentInstallation {
     currentAppInstallation {
-      activeSubscriptions(first: 10) {
+      activeSubscriptions {
         id
         name
         status

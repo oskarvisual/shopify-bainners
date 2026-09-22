@@ -57,8 +57,8 @@ function sanitizeCustomCssInput(rawValue: unknown, maxLength = 20000) {
 async function ensureBannerMetaobjectDefinition(admin: any) {
   try {
     const existing = await admin.graphql(
-      `
-      query GetDefinition($type: String!) {
+      `#graphql
+      query BannerEditEnsureDefinition($type: String!) {
         metaobjectDefinitionByType(type: $type) {
           id
         }
@@ -76,8 +76,8 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
 
   try {
     const response = await admin.graphql(
-      `
-      mutation CreateDefinition($definition: MetaobjectDefinitionCreateInput!) {
+      `#graphql
+      mutation BannerEditCreateDefinition($definition: MetaobjectDefinitionCreateInput!) {
         metaobjectDefinitionCreate(definition: $definition) {
           metaobjectDefinition {
             id
@@ -145,14 +145,18 @@ async function syncAllBannerMetaobjects(admin: any, shopId: string) {
   // 1. Delete ALL existing metaobjects
   try {
     const allMetaResponse = await admin.graphql(
-      `query { metaobjects(first: 250, type: "${METAOBJECT_TYPE}") { nodes { id } } }`
+      `#graphql
+      query BannerEditListBanners($type: String!) { metaobjects(first: 250, type: $type) { nodes { id } } }`,
+      { variables: { type: METAOBJECT_TYPE } }
     );
     const allMetaJson = await allMetaResponse.json();
     const existingMetaobjects = allMetaJson?.data?.metaobjects?.nodes || [];
 
     for (const meta of existingMetaobjects) {
       await admin.graphql(
-        `mutation { metaobjectDelete(id: "${meta.id}") { deletedId } }`
+        `#graphql
+        mutation BannerEditDeleteBanner($id: ID!) { metaobjectDelete(id: $id) { deletedId } }`,
+        { variables: { id: meta.id } }
       );
     }
   } catch (error) {
@@ -207,8 +211,8 @@ async function syncAllBannerMetaobjects(admin: any, shopId: string) {
 
     try {
       const createResponse = await admin.graphql(
-        `
-        mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
+        `#graphql
+        mutation BannerEditCreateBanner($metaobject: MetaobjectCreateInput!) {
           metaobjectCreate(metaobject: $metaobject) {
             metaobject {
               id
@@ -480,8 +484,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     let productLoadError: string | null = null;
     try {
       const productsResponse = await admin.graphql(
-        `
-          query getProducts($first: Int!) {
+        `#graphql
+          query BannerEditGetProducts($first: Int!) {
             products(first: $first) {
               nodes {
                 id
@@ -542,8 +546,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }> = [];
     try {
       const filesResponse = await admin.graphql(
-        `
-          query getFiles($first: Int!) {
+        `#graphql
+          query BannerEditGetFiles($first: Int!) {
             files(first: $first) {
               nodes {
                 id

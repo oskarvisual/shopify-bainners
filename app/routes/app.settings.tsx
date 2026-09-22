@@ -83,8 +83,8 @@ const ANNOUNCEMENT_LAYOUT_OPTIONS = [
   { label: "Stacked", value: "stacked" },
 ];
 
-const ACTIVE_SUBSCRIPTIONS_QUERY = `
-  query GetActiveSubscriptions {
+const ACTIVE_SUBSCRIPTIONS_QUERY = `#graphql
+  query SettingsGetActiveSubscriptions {
     currentAppInstallation {
       activeSubscriptions {
         id

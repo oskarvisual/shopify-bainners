@@ -5,8 +5,8 @@ const METAOBJECT_TYPE = "bainners_banner";
 async function ensureBannerMetaobjectDefinition(admin: any) {
   try {
     const existing = await admin.graphql(
-      `
-      query GetDefinition($type: String!) {
+      `#graphql
+      query MetaobjectsEnsureDefinition($type: String!) {
         metaobjectDefinitionByType(type: $type) {
           id
         }
@@ -24,8 +24,8 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
 
   try {
     const response = await admin.graphql(
-      `
-      mutation CreateDefinition($definition: MetaobjectDefinitionCreateInput!) {
+      `#graphql
+      mutation MetaobjectsCreateDefinition($definition: MetaobjectDefinitionCreateInput!) {
         metaobjectDefinitionCreate(definition: $definition) {
           metaobjectDefinition {
             id
@@ -92,13 +92,19 @@ export async function syncAllBannerMetaobjects(admin: any, shopId: string) {
 
   try {
     const allMetaResponse = await admin.graphql(
-      `query { metaobjects(first: 250, type: "${METAOBJECT_TYPE}") { nodes { id } } }`
+      `#graphql
+      query MetaobjectsListBanners($type: String!) { metaobjects(first: 250, type: $type) { nodes { id } } }`,
+      { variables: { type: METAOBJECT_TYPE } }
     );
     const allMetaJson = await allMetaResponse.json();
     const existingMetaobjects = allMetaJson?.data?.metaobjects?.nodes || [];
 
     for (const meta of existingMetaobjects) {
-      await admin.graphql(`mutation { metaobjectDelete(id: "${meta.id}") { deletedId } }`);
+      await admin.graphql(
+        `#graphql
+        mutation MetaobjectsDeleteBanner($id: ID!) { metaobjectDelete(id: $id) { deletedId } }`,
+        { variables: { id: meta.id } }
+      );
     }
   } catch (error) {
     console.error("[syncAllBannerMetaobjects] Failed to delete existing metaobjects:", error);
@@ -150,8 +156,8 @@ export async function syncAllBannerMetaobjects(admin: any, shopId: string) {
 
     try {
       const createResponse = await admin.graphql(
-        `
-        mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
+        `#graphql
+        mutation MetaobjectsCreateBanner($metaobject: MetaobjectCreateInput!) {
           metaobjectCreate(metaobject: $metaobject) {
             metaobject { id }
             userErrors { field message }

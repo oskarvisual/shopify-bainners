@@ -5,7 +5,7 @@ import { db } from "../db.server";
 import { normalizePlan } from "../lib/plans";
 import { getPlanStorageLimitGB } from "../utils/storage.server";
 
-const ACTIVE_SUBSCRIPTIONS_QUERY = `
+const ACTIVE_SUBSCRIPTIONS_QUERY = `#graphql
   query GetActiveSubscriptions {
     currentAppInstallation {
       activeSubscriptions {
