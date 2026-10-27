@@ -30,7 +30,12 @@ import { zonedTimeToUtc } from "../utils/timezone.server";
 import { InlineEditableText } from "../components/InlineEditableText";
 import { AnalyticsLineChart } from "../components/AnalyticsLineChart";
 import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
-import { getPlanLimits, planHasFeature, PlanFeature } from "../lib/plans";
+import { getPlanLimits, planHasFeature, PlanFeature, getAiModelForPlan } from "../lib/plans";
+import {
+  checkQuota,
+  checkStorageQuota,
+  syncLocalQuota,
+} from "../utils/quota.server";
 import {
   ArrowLeftIcon,
   DeleteIcon,
@@ -909,7 +914,24 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     const fullPrompt = [prompt, additionalDetails, textBlock].filter(Boolean).join("\n");
     const referenceImagesCsv = referenceImages.join(",");
+
+    // Quota gate: the n8n Data Table holds the authoritative daily counter.
+    const quota = await checkQuota(
+      shopRecord.id,
+      shop,
+      shopRecord.plan,
+      "generation"
+    );
+    if (!quota.allowed) {
+      return json(
+        { success: false, error: quota.reason, quota },
+        { status: 403 }
+      );
+    }
+    await syncLocalQuota(shopRecord.id, "generation", quota.used);
+
     const storageUsedMB = await getStorageUsageMB(shopRecord.id);
+    const aiModel = getAiModelForPlan(shopRecord.plan);
 
     const result = await dispatchImageAutomation({
       shop,
@@ -923,6 +945,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         aspect_ratio: aspectRatio,
         resolution,
         output_format: "png",
+        aiModel,
+        aiGenerationsLimit: quota.limit,
         stylePrompt: stylePrompt || undefined,
         productContext: productId
           ? {
@@ -1113,6 +1137,36 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+    // Quota gate: daily upload allowance for the plan.
+    const uploadQuota = await checkQuota(
+      shopRecord.id,
+      shop,
+      shopRecord.plan,
+      "upload"
+    );
+    if (!uploadQuota.allowed) {
+      return json(
+        { success: false, error: uploadQuota.reason, quota: uploadQuota },
+        { status: 403 }
+      );
+    }
+    await syncLocalQuota(shopRecord.id, "upload", uploadQuota.used);
+
+    // Storage gate: the shop must have room for this file.
+    const incomingMB = imageFile.size / (1024 * 1024);
+    const storageQuota = await checkStorageQuota(
+      shopRecord.id,
+      shopRecord.plan,
+      incomingMB
+    );
+    if (!storageQuota.allowed) {
+      return json(
+        { success: false, error: storageQuota.reason, quota: storageQuota },
+        { status: 403 }
+      );
+    }
+
     const storageUsedMB = await getStorageUsageMB(shopRecord.id);
 
     const result = await dispatchImageAutomation({
@@ -1128,6 +1182,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         mimeType: imageFile.type,
         optimize: true,
         storageUsedMB,
+        aiUploadsLimit: uploadQuota.limit,
       },
     });
 

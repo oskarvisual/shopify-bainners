@@ -142,16 +142,47 @@ export function getPlanLimits(plan?: string | null) {
     return {
       activeBanners: 100,
       analyticsRange: 30,
+      storageGB: 5,
+      aiGenerationsPerDay: 10,
+      aiUploadsPerDay: 50,
+      monthlyViews: Infinity,
+      aiModel: "nano-banana-pro",
     };
   }
   if (normalized === SubscriptionPlan.ULTRA) {
     return {
       activeBanners: Infinity,
       analyticsRange: 90,
+      storageGB: 10,
+      aiGenerationsPerDay: 20,
+      aiUploadsPerDay: 200,
+      monthlyViews: Infinity,
+      aiModel: "nano-banana-pro",
     };
   }
   return {
     activeBanners: 3,
     analyticsRange: 7,
+    storageGB: 1,
+    aiGenerationsPerDay: 1,
+    aiUploadsPerDay: 5,
+    monthlyViews: 20000,
+    aiModel: "flux-2/pro-text-to-image",
   };
+}
+
+/**
+ * Map a plan to its KIE model.
+ * Free uses Flux 2 Pro; Pro and Ultra use Nano Banana Pro.
+ */
+export function getAiModelForPlan(plan?: string | null): string {
+  return getPlanLimits(plan).aiModel;
+}
+
+/**
+ * Determine whether a model belongs to the plan tier (used by n8n enforcement).
+ */
+export function isModelAllowedForPlan(plan: string, model: string): boolean {
+  const allowed = getAiModelForPlan(plan);
+  return model === allowed;
 }
