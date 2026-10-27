@@ -85,23 +85,33 @@ async function ensureBannerMetaobjectDefinition(admin: any) {
   }
 }
 
+/**
+ * Sync the banner metaobjects for a shop.
+ *
+ * Existing metaobjects are updated in place (matched by handle) instead of
+ * being deleted and recreated. Deleting them would break the references the
+ * merchant configured in the Theme Editor.
+ */
 export async function syncAllBannerMetaobjects(admin: any, shopId: string) {
   if (!admin) return;
 
   await ensureBannerMetaobjectDefinition(admin);
 
+  // Index the existing metaobjects by handle so we can update them in place.
+  const existingByHandle = new Map<string, string>();
   try {
     const allMetaResponse = await admin.graphql(
-      `query { metaobjects(first: 250, type: "${METAOBJECT_TYPE}") { nodes { id } } }`
+      `query { metaobjects(first: 250, type: "${METAOBJECT_TYPE}") { nodes { id handle } } }`
     );
     const allMetaJson = await allMetaResponse.json();
     const existingMetaobjects = allMetaJson?.data?.metaobjects?.nodes || [];
-
     for (const meta of existingMetaobjects) {
-      await admin.graphql(`mutation { metaobjectDelete(id: "${meta.id}") { deletedId } }`);
+      if (meta?.handle && meta?.id) {
+        existingByHandle.set(meta.handle, meta.id);
+      }
     }
   } catch (error) {
-    console.error("[syncAllBannerMetaobjects] Failed to delete existing metaobjects:", error);
+    console.error("[syncAllBannerMetaobjects] Failed to list existing metaobjects:", error);
   }
 
   const activeBanners = await db.banner.findMany({
@@ -148,7 +158,40 @@ export async function syncAllBannerMetaobjects(admin: any, shopId: string) {
       { key: "thumbnail", value: thumbnail },
     ];
 
+    const handle = `banner-${banner.id}`;
+    const existingId = existingByHandle.get(handle);
+
     try {
+      if (existingId) {
+        // Update in place so the Theme Editor references keep working.
+        const updateResponse = await admin.graphql(
+          `
+          mutation UpdateMetaobject($id: ID!, $metaobject: MetaobjectUpdateInput!) {
+            metaobjectUpdate(id: $id, metaobject: $metaobject) {
+              metaobject { id }
+              userErrors { field message }
+            }
+          }
+          `,
+          {
+            variables: {
+              id: existingId,
+              metaobject: { fields },
+            },
+          }
+        );
+        const updateJson = await updateResponse.json();
+        if (updateJson?.data?.metaobjectUpdate?.userErrors?.length > 0) {
+          console.error(
+            "[syncAllBannerMetaobjects] Update error for",
+            banner.title,
+            ":",
+            updateJson.data.metaobjectUpdate.userErrors
+          );
+        }
+        continue;
+      }
+
       const createResponse = await admin.graphql(
         `
         mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
@@ -162,7 +205,7 @@ export async function syncAllBannerMetaobjects(admin: any, shopId: string) {
           variables: {
             metaobject: {
               type: METAOBJECT_TYPE,
-              handle: `banner-${banner.id}`,
+              handle,
               fields,
             },
           },
@@ -178,7 +221,7 @@ export async function syncAllBannerMetaobjects(admin: any, shopId: string) {
         );
       }
     } catch (error) {
-      console.error("[syncAllBannerMetaobjects] Failed to create metaobject for", banner.title, ":", error);
+      console.error("[syncAllBannerMetaobjects] Failed to sync metaobject for", banner.title, ":", error);
     }
   }
 }
