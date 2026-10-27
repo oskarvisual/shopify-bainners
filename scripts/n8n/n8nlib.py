@@ -178,8 +178,8 @@ def webhook(path, name, nid):
     }
 
 
-def code(js, name, nid, pos):
-    return {
+def code(js, name, nid, pos, on_error=None):
+    node = {
         "parameters": {"jsCode": js},
         "id": nid,
         "name": name,
@@ -187,6 +187,12 @@ def code(js, name, nid, pos):
         "typeVersion": 2,
         "position": pos,
     }
+    if on_error:
+        # Continua el flujo devolviendo un item vacio cuando el nodo falla,
+        # para que el webhook pueda responder con un error claro.
+        node["onError"] = on_error
+        node["alwaysOutputData"] = True
+    return node
 
 
 def http_request(url, name, nid, pos, method="POST", body=None, headers=None, timeout=30000):
@@ -261,7 +267,13 @@ def data_table(op, dt_id, name, nid, pos, columns=None, matching=None, extra=Non
     return node
 
 
-def s3_upload(bucket, key_expr, name, nid, pos, cred_id, binary_prop="data"):
+def s3_upload(bucket, key_expr, name, nid, pos, cred_id, binary_prop="data",
+              public=True):
+    # El bucket no tiene bucket policy, asi que el ACL por defecto es privado
+    # y las imagenes no se verian en el storefront. additionalFields.acl envia
+    # el header x-amz-acl para que el objeto quede publico.
+    additional = {"acl": "publicRead"} if public else {}
+
     return {
         "parameters": {
             "resource": "file",
@@ -270,6 +282,7 @@ def s3_upload(bucket, key_expr, name, nid, pos, cred_id, binary_prop="data"):
             "fileName": key_expr,
             "binaryData": True,
             "binaryPropertyName": binary_prop,
+            "additionalFields": additional,
             "options": {},
         },
         "id": nid,

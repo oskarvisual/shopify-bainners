@@ -80,6 +80,30 @@ Estas son las trampas que hacen que un workflow escrito a mano no funcione.
    arranque; si las filas de `shared_workflow` no existen todavía, la
    activación falla. Crear las filas y reiniciar de nuevo.
 
+10. **Los nodos Code que lanzan errores cortan el workflow en silencio.**
+    Si el nodo falla, el `respondToWebhook` nunca responde y el cliente
+    recibe un body vacío con HTTP 200. Marcar el nodo con
+    `onError: "continueRegularOutput"` + `alwaysOutputData: true` y
+    comprobar `$('Nodo').item.error` en el siguiente nodo para poder
+    responder con un error claro.
+
+## ACL público en los uploads
+
+El bucket `cdn-orivisdev` **no tiene bucket policy**, así que los objetos
+nuevos heredan el ACL privado por defecto y devuelven 403 en el storefront.
+
+Por eso el nodo S3 de upload debe enviar `additionalFields.acl`, que n8n
+traduce al header `x-amz-acl`:
+
+```python
+"additionalFields": {"acl": "publicRead"}
+```
+
+Los objetos que ya estaban subidos con el flujo anterior tienen el ACL
+`public-read` explícito. Para poner al día los que quedaron privados hay
+que listar el bucket y hacer `PUT <key>?acl` con el header
+`x-amz-acl: public-read` en los que no tengan el grupo `AllUsers`.
+
 ## Data Table `bainners_usage`
 
 Es la fuente de verdad de los contadores diarios de IA.
