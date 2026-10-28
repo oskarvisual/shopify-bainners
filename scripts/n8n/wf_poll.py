@@ -23,7 +23,7 @@ return [{ json: { shop, taskId } }];
 """
 
 POLL_STATUS_JS = """
-// Consulta el estado de la tarea en KIE
+// Consulta el estado de la tarea en KIE y normaliza la respuesta.
 const d = $json.data || {};
 const ctx = $('Authorize poll').first().json;
 
@@ -32,13 +32,25 @@ try { result = JSON.parse(d.resultJson || '{}'); } catch (e) {}
 
 const resultUrls = Array.isArray(result.resultUrls) ? result.resultUrls : [];
 const rawUrl = resultUrls[0] || '';
-const state = d.state || 'waiting';
+const rawState = String(d.state || 'waiting').toLowerCase();
+
+// Estados terminales de error
+const FAILED_STATES = ['fail', 'failed', 'error', 'cancelled', 'canceled', 'rejected'];
+const isFailed = FAILED_STATES.includes(rawState);
+
+// La imagen solo existe si KIE la genero. Un taskId sin resultUrls todavia
+// esta en proceso: la app debe seguir haciendo poll.
+const hasImage = rawState === 'success' && Boolean(rawUrl);
+
+const state = hasImage ? 'success' : (isFailed ? 'failed' : 'waiting');
 
 return [{
   json: {
     ...ctx,
     state,
-    success: state === 'success',
+    rawState,
+    success: hasImage,
+    failed: isFailed,
     message: d.failMsg || '',
     rawUrl,
     filename: rawUrl ? rawUrl.split('/').pop().split('?')[0] : '',
@@ -47,22 +59,44 @@ return [{
 """
 
 POLL_KEY_JS = """
-// Construye la key del objeto en S3
+// Construye la key del objeto en S3.
+// Si todavia no hay imagen no se genera key: el flujo termina antes.
 const ctx = $('Resolve status').first().json;
+
+if (!ctx.success) {
+  return [{ json: { ...ctx, key: '' } }];
+}
+
 const safeName = (ctx.filename || 'image.png').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100);
 const key = 'bAInners/' + ctx.shop + '/' + ctx.taskId + '-' + safeName;
 return [{ json: { ...ctx, key } }];
 """
 
 POLL_RESULT_JS = """
+// Construye la respuesta segun el estado de la tarea.
 const ctx = $('Build key').first().json;
+
+// KIE todavia esta generando: la app debe seguir haciendo poll.
+if (!ctx.success) {
+  return [{
+    json: {
+      success: false,
+      action: 'poll',
+      state: ctx.state || 'waiting',
+      rawState: ctx.rawState || '',
+      imageUrl: '',
+      message: ctx.message || '',
+    },
+  }];
+}
+
 const key = ctx.key;
 const cdn = 'https://cdn-orivisdev.nyc3.cdn.digitaloceanspaces.com/' + key;
 return [{
   json: {
     success: true,
     action: 'upload',
-    state: ctx.state,
+    state: 'success',
     imageUrl: cdn,
     cdnUrl: cdn,
     filename: key.split('/').pop(),
@@ -87,11 +121,26 @@ poll_nodes = [
     ),
     code(POLL_STATUS_JS, "Resolve status", "bainners-status-resolve", [660, 0]),
     code(POLL_KEY_JS, "Build key", "bainners-status-key", [880, 0]),
-    http_download(
-        "={{ $('Resolve status').item.json.rawUrl }}",
-        "Download image", "bainners-status-download", [1100, 0],
-    ),
-    s3_upload(BUCKET, "={{ $('Build key').item.json.key }}", "Upload to Spaces", "bainners-status-s3", [1320, 0], CRED),
+    {
+        "parameters": {
+            "method": "GET",
+            "url": "={{ $('Resolve status').item.json.rawUrl }}",
+            "options": {
+                "timeout": 60000,
+                "response": {"response": {"responseFormat": "file", "outputPropertyName": "data"}},
+            },
+        },
+        "id": "bainners-status-download",
+        "name": "Download image",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1100, 0],
+        # Si la descarga falla, continua para poder responder con el error.
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": True,
+    },
+    s3_upload(BUCKET, "={{ $('Build key').item.json.key }}", "Upload to Spaces", "bainners-status-s3", [1320, 0], CRED,
+              on_error="continueRegularOutput"),
     code(POLL_RESULT_JS, "Build result", "bainners-status-result", [1540, 0]),
     respond(
         "={{ $('Build result').item.json }}",

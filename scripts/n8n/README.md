@@ -116,3 +116,30 @@ Es la fuente de verdad de los contadores diarios de IA.
 | `count` | number | usos consumidos en el día |
 
 Clave única lógica: `(shop, date, kind)`.
+
+## Estados del workflow Poll
+
+La generación con IA es asíncrona: KIE devuelve un `taskId` y hay que
+consultar el estado hasta que termine. El workflow distingue tres casos en
+el nodo "Resolve status":
+
+| Estado de KIE | `rawUrl` | Respuesta del workflow |
+|---|---|---|
+| `success` | con URL | `{"success":true,"state":"success","imageUrl":"<CDN url>"}` |
+| `waiting` / en proceso | vacía | `{"success":false,"state":"waiting","imageUrl":""}` |
+| `fail` / `error` / `cancelled` | vacía | `{"success":false,"state":"failed","message":"..."}` |
+
+**Es importante no intentar descargar la imagen cuando `rawUrl` está
+vacía**: el nodo HTTP falla con `Invalid URL: . URL must start with "http"`
+y el workflow entero termina en error, en vez de responder que la tarea
+sigue en curso.
+
+La app (que hace poll cada 10 segundos) ya sabe manejar ese estado: si la
+respuesta no trae `imageUrl` devuelve `{success: true, state: "waiting"}` y
+el frontend sigue consultando. Antes del fix, el HTTP 500 de n8n se
+traducía en `success: false` + `error`, y el modal cerraba mostrando un
+error en lugar de esperar a que la imagen estuviera lista.
+
+Por eso los nodos "Download image" y "Upload to Spaces" llevan
+`onError: continueRegularOutput`: un fallo puntual de red no debe cortar el
+flujo.

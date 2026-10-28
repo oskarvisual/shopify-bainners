@@ -268,13 +268,13 @@ def data_table(op, dt_id, name, nid, pos, columns=None, matching=None, extra=Non
 
 
 def s3_upload(bucket, key_expr, name, nid, pos, cred_id, binary_prop="data",
-              public=True):
+              public=True, on_error=None):
     # El bucket no tiene bucket policy, asi que el ACL por defecto es privado
     # y las imagenes no se verian en el storefront. additionalFields.acl envia
     # el header x-amz-acl para que el objeto quede publico.
     additional = {"acl": "publicRead"} if public else {}
 
-    return {
+    node = {
         "parameters": {
             "resource": "file",
             "operation": "upload",
@@ -296,6 +296,10 @@ def s3_upload(bucket, key_expr, name, nid, pos, cred_id, binary_prop="data",
         "position": pos,
         "credentials": {"s3": {"id": cred_id, "name": "DigitalOcean Spaces cdn-orivisdev"}},
     }
+    if on_error:
+        node["onError"] = on_error
+        node["alwaysOutputData"] = True
+    return node
 
 
 def s3_delete(bucket, key_expr, name, nid, pos, cred_id):
