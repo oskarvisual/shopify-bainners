@@ -113,12 +113,25 @@ return [{
 poll_nodes = [
     webhook("1f6132c4-2d6c-4154-9bb3-bbd6cfa14586", "Status webhook", "bainners-status-webhook"),
     code(POLL_AUTH_JS, "Authorize poll", "bainners-status-auth", [220, 0]),
-    http_request(
-        "={{ 'https://api.kie.ai/api/v1/jobs/recordInfo?taskId=' + $json.taskId }}",
-        "Get KIE task", "bainners-status-kie", [440, 0],
-        method="GET",
-        headers=[{"name": "Authorization", "value": "={{ 'Bearer ' + $env.KIE_API_KEY }}"}],
-    ),
+    {
+        "parameters": {
+            "method": "GET",
+            "url": "={{ 'https://api.kie.ai/api/v1/jobs/recordInfo?taskId=' + $json.taskId }}",
+            "sendHeaders": True,
+            "headerParameters": {"parameters": []},
+            "authentication": "genericCredentialType",
+            "genericAuthType": "httpHeaderAuth",
+            "options": {"timeout": 30000},
+        },
+        "id": "bainners-status-kie",
+        "name": "Get KIE task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [440, 0],
+        "credentials": {
+            "httpHeaderAuth": {"id": "59662b43-e941-46c1-bfe1-157c4eb44fc2", "name": "KIE API"},
+        },
+    },
     code(POLL_STATUS_JS, "Resolve status", "bainners-status-resolve", [660, 0]),
     code(POLL_KEY_JS, "Build key", "bainners-status-key", [880, 0]),
     {

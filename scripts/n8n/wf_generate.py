@@ -167,16 +167,32 @@ gen_nodes = [
     },
     code(GEN_ENFORCE_JS, "Enforce quota", "bainners-generate-enforce", [660, 0]),
     code(VALIDATE_JS, "Validate KIE params", "bainners-generate-validate", [790, 0]),
-    http_request(
-        "https://api.kie.ai/api/v1/jobs/createTask",
-        "Create KIE task", "bainners-generate-kie", [880, 0],
-        method="POST",
-        body=CREATE_BODY,
-        headers=[
-            {"name": "Authorization", "value": "={{ 'Bearer ' + $env.KIE_API_KEY }}"},
-            {"name": "Content-Type", "value": "application/json"},
-        ],
-    ),
+    {
+        "parameters": {
+            "method": "POST",
+            "url": "https://api.kie.ai/api/v1/jobs/createTask",
+            "sendHeaders": True,
+            "headerParameters": {
+                "parameters": [
+                    {"name": "Content-Type", "value": "application/json"},
+                ],
+            },
+            "authentication": "genericCredentialType",
+            "genericAuthType": "httpHeaderAuth",
+            "sendBody": True,
+            "specifyBody": "json",
+            "jsonBody": CREATE_BODY,
+            "options": {"timeout": 30000},
+        },
+        "id": "bainners-generate-kie",
+        "name": "Create KIE task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [880, 0],
+        "credentials": {
+            "httpHeaderAuth": {"id": "59662b43-e941-46c1-bfe1-157c4eb44fc2", "name": "KIE API"},
+        },
+    },
     code(GEN_TASK_JS, "Extract taskId", "bainners-generate-task", [1100, 0]),
     code(GEN_INCREMENT_JS, "Increment generation count", "bainners-generate-increment", [1210, 0]),
     {

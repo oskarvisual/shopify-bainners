@@ -104,6 +104,39 @@ Los objetos que ya estaban subidos con el flujo anterior tienen el ACL
 que listar el bucket y hacer `PUT <key>?acl` con el header
 `x-amz-acl: public-read` en los que no tengan el grupo `AllUsers`.
 
+## Credencial de KIE
+
+La key de KIE vive **cifrada** en la credencial de n8n **"KIE API"**
+(tipo `httpHeaderAuth`), no en texto plano en el `.env` del servidor.
+
+El tipo `httpHeaderAuth` usa dos campos:
+
+```json
+{ "name": "Authorization", "value": "Bearer <KIE_API_KEY>" }
+```
+
+- `name` → el **nombre del header HTTP** (no el nombre visible de la credencial)
+- `value` → el valor del header
+
+Si `name` no es un token HTTP válido, n8n falla con
+`Header name must be a valid HTTP token`.
+
+El nodo **HTTP Request** la usa así:
+
+```json
+{
+  "authentication": "genericCredentialType",
+  "genericAuthType": "httpHeaderAuth"
+}
+```
+
+y NO lleva un header `Authorization` manual en `headerParameters` (el nodo
+lo añade desde la credencial).
+
+> La app de Shopify QA comparte esta misma credencial. Cuando se creen
+> workflows para otra cosa con otra key de KIE, hay que crear una credencial
+> nueva (p.ej. "KIE API - <proyecto>") para no mezclarlas.
+
 ## Validación de parámetros de KIE
 
 El nodo **"Validate KIE params"** (workflow Generate) normaliza el aspect
