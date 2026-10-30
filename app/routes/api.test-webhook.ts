@@ -11,6 +11,7 @@
 
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { generateBannerWithAI, uploadBannerImage, optimizeBannerImage } from "../utils/automation.server";
+import { normalizeForPlan } from "../utils/aspect-ratio";
 import { authenticate } from "../shopify.server";
 
 const ALLOWED_TEST_ACTIONS = new Set(["generate", "upload", "optimize"]);
@@ -42,17 +43,25 @@ export async function action({ request }: ActionFunctionArgs) {
     if (action === "generate") {
       console.log("🧪 Testing AI generation...");
 
+      // El plan determina el modelo y, con el, los aspect ratios y
+      // resoluciones validos. Se normaliza antes de llamar a KIE.
+      const normalized = normalizeForPlan(body.plan, {
+        aspectRatio: body.aspect_ratio,
+        resolution: body.resolution,
+      });
+
       const result = await generateBannerWithAI({
         shop: shop,
         prompt: body.prompt || "A clean ecommerce hero banner with modern lighting",
-        aspect_ratio: body.aspect_ratio || "1:1",
-        resolution: body.resolution || "1K",
+        aspect_ratio: normalized.aspectRatio,
+        resolution: normalized.resolution,
         output_format: body.output_format || "png",
         stylePrompt: body.stylePrompt,
         negativePrompt: body.negativePrompt,
         productContext: body.productContext,
         referenceImages: body.referenceImages,
         variantsCount: body.variantsCount || 2,
+        plan: body.plan,
         meta: {
           source: "test-api",
           testMode: true,

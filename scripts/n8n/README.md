@@ -104,6 +104,36 @@ Los objetos que ya estaban subidos con el flujo anterior tienen el ACL
 que listar el bucket y hacer `PUT <key>?acl` con el header
 `x-amz-acl: public-read` en los que no tengan el grupo `AllUsers`.
 
+## Validación de parámetros de KIE
+
+El nodo **"Validate KIE params"** (workflow Generate) normaliza el aspect
+ratio y la resolución según el modelo del plan **antes** de llamar a KIE.
+
+Restricciones por modelo (verificadas contra la API el 2026-10-29):
+
+| Modelo | Aspect ratios | Resoluciones |
+|---|---|---|
+| `flux-2/pro-text-to-image` (free) | `1:1 2:3 3:2 3:4 4:3 9:16 16:9` | `1K 2K` |
+| `nano-banana-pro` (pro/ultra) | + `4:5 5:4 21:9 auto` | `1K 2K` |
+
+KIE responde `This aspect_ratio is not within the range of allowed options`
+o `resolution is not within the range of allowed options` con cualquier
+valor fuera de la lista.
+
+Equivalencias aplicadas cuando el ratio no lo acepta el modelo:
+
+| Pedido | Ajustado a |
+|---|---|
+| `auto` | `1:1` |
+| `4:5` | `3:4` |
+| `5:4` | `4:3` |
+| `21:9` | `16:9` |
+| `4K` | `1K` |
+
+La app ya hace esta traducción (`app/utils/aspect-ratio.ts`), pero tenerla
+también en n8n protege contra llamadas directas al webhook que no pasen
+por la app.
+
 ## Data Table `bainners_usage`
 
 Es la fuente de verdad de los contadores diarios de IA.

@@ -6,6 +6,7 @@
  *
  * Inspired by: /Users/oscarfernandez/Projects/Shopify/shopify-qa/app/lib/automation.server.js
  */
+import { normalizeForPlan } from "./aspect-ratio";
 
 // ============================================
 // Configuration
@@ -404,23 +405,34 @@ export async function generateBannerWithAI(params: {
   productContext?: Record<string, any>;
   referenceImages?: string | string[];
   variantsCount?: number;
+  plan?: string;
   meta?: AutomationMeta;
 }): Promise<{
   success: boolean;
   data?: any;
   error?: string;
 }> {
+  // Normaliza el aspect ratio y la resolucion a los que acepta el modelo
+  // del plan. KIE rechaza con "not within the range of allowed options"
+  // cualquier valor fuera de su lista (p.ej. Flux no acepta "auto").
+  const normalized = normalizeForPlan(params.plan, {
+    aspectRatio: params.aspect_ratio,
+    resolution: params.resolution,
+  });
+
   return dispatchImageAutomation({
     shop: params.shop,
     action: "generate",
+    plan: params.plan,
     payload: {
       action: "generate",
       shop: params.shop,
       app: AUTOMATIONS_APP_ID,
       prompt: params.prompt,
-      aspect_ratio: params.aspect_ratio || "1:1",
-      resolution: params.resolution || "1K",
+      aspect_ratio: normalized.aspectRatio,
+      resolution: normalized.resolution,
       output_format: params.output_format || "png",
+      aiModel: normalized.model,
       stylePrompt: params.stylePrompt,
       negativePrompt: params.negativePrompt,
       productContext: params.productContext,
