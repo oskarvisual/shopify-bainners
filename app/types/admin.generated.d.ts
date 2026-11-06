@@ -180,14 +180,15 @@ export type MetaobjectsListBannersQueryVariables = AdminTypes.Exact<{
 }>;
 
 
-export type MetaobjectsListBannersQuery = { metaobjects: { nodes: Array<Pick<AdminTypes.Metaobject, 'id'>> } };
+export type MetaobjectsListBannersQuery = { metaobjects: { nodes: Array<Pick<AdminTypes.Metaobject, 'id' | 'handle'>> } };
 
-export type MetaobjectsDeleteBannerMutationVariables = AdminTypes.Exact<{
+export type MetaobjectsUpdateBannerMutationVariables = AdminTypes.Exact<{
   id: AdminTypes.Scalars['ID']['input'];
+  metaobject: AdminTypes.MetaobjectUpdateInput;
 }>;
 
 
-export type MetaobjectsDeleteBannerMutation = { metaobjectDelete?: AdminTypes.Maybe<Pick<AdminTypes.MetaobjectDeletePayload, 'deletedId'>> };
+export type MetaobjectsUpdateBannerMutation = { metaobjectUpdate?: AdminTypes.Maybe<{ metaobject?: AdminTypes.Maybe<Pick<AdminTypes.Metaobject, 'id'>>, userErrors: Array<Pick<AdminTypes.MetaobjectUserError, 'field' | 'message'>> }> };
 
 export type MetaobjectsCreateBannerMutationVariables = AdminTypes.Exact<{
   metaobject: AdminTypes.MetaobjectCreateInput;
@@ -209,7 +210,7 @@ interface GeneratedQueryTypes {
   "#graphql\n  query SettingsGetActiveSubscriptions {\n    currentAppInstallation {\n      activeSubscriptions {\n        id\n        name\n        status\n        lineItems {\n          plan {\n            pricingDetails {\n              ... on AppRecurringPricing {\n                price {\n                  amount\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n": {return: SettingsGetActiveSubscriptionsQuery, variables: SettingsGetActiveSubscriptionsQueryVariables},
   "#graphql\n  query GetActiveSubscriptions {\n    currentAppInstallation {\n      activeSubscriptions {\n        id\n        name\n        status\n        lineItems {\n          plan {\n            pricingDetails {\n              ... on AppRecurringPricing {\n                price {\n                  amount\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n": {return: GetActiveSubscriptionsQuery, variables: GetActiveSubscriptionsQueryVariables},
   "#graphql\n      query MetaobjectsEnsureDefinition($type: String!) {\n        metaobjectDefinitionByType(type: $type) {\n          id\n        }\n      }\n      ": {return: MetaobjectsEnsureDefinitionQuery, variables: MetaobjectsEnsureDefinitionQueryVariables},
-  "#graphql\n      query MetaobjectsListBanners($type: String!) { metaobjects(first: 250, type: $type) { nodes { id } } }": {return: MetaobjectsListBannersQuery, variables: MetaobjectsListBannersQueryVariables},
+  "#graphql\n      query MetaobjectsListBanners($type: String!) { metaobjects(first: 250, type: $type) { nodes { id handle } } }": {return: MetaobjectsListBannersQuery, variables: MetaobjectsListBannersQueryVariables},
 }
 
 interface GeneratedMutationTypes {
@@ -222,7 +223,7 @@ interface GeneratedMutationTypes {
   "#graphql\n        mutation BannerIndexCreateBanner($metaobject: MetaobjectCreateInput!) {\n          metaobjectCreate(metaobject: $metaobject) {\n            metaobject {\n              id\n            }\n            userErrors {\n              field\n              message\n            }\n          }\n        }\n        ": {return: BannerIndexCreateBannerMutation, variables: BannerIndexCreateBannerMutationVariables},
   "#graphql\n  mutation AppSubscriptionCreate($name: String!, $returnUrl: URL!, $test: Boolean!, $lineItems: [AppSubscriptionLineItemInput!]!) {\n    appSubscriptionCreate(name: $name, returnUrl: $returnUrl, test: $test, lineItems: $lineItems) {\n      userErrors {\n        field\n        message\n      }\n      confirmationUrl\n      appSubscription {\n        id\n        name\n      }\n    }\n  }\n": {return: AppSubscriptionCreateMutation, variables: AppSubscriptionCreateMutationVariables},
   "#graphql\n      mutation MetaobjectsCreateDefinition($definition: MetaobjectDefinitionCreateInput!) {\n        metaobjectDefinitionCreate(definition: $definition) {\n          metaobjectDefinition {\n            id\n          }\n          userErrors {\n            field\n            message\n          }\n        }\n      }\n      ": {return: MetaobjectsCreateDefinitionMutation, variables: MetaobjectsCreateDefinitionMutationVariables},
-  "#graphql\n        mutation MetaobjectsDeleteBanner($id: ID!) { metaobjectDelete(id: $id) { deletedId } }": {return: MetaobjectsDeleteBannerMutation, variables: MetaobjectsDeleteBannerMutationVariables},
+  "#graphql\n          mutation MetaobjectsUpdateBanner($id: ID!, $metaobject: MetaobjectUpdateInput!) {\n            metaobjectUpdate(id: $id, metaobject: $metaobject) {\n              metaobject { id }\n              userErrors { field message }\n            }\n          }\n          ": {return: MetaobjectsUpdateBannerMutation, variables: MetaobjectsUpdateBannerMutationVariables},
   "#graphql\n        mutation MetaobjectsCreateBanner($metaobject: MetaobjectCreateInput!) {\n          metaobjectCreate(metaobject: $metaobject) {\n            metaobject { id }\n            userErrors { field message }\n          }\n        }\n        ": {return: MetaobjectsCreateBannerMutation, variables: MetaobjectsCreateBannerMutationVariables},
 }
 declare module '@shopify/admin-api-client' {
