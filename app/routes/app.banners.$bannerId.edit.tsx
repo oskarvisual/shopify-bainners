@@ -32,6 +32,16 @@ import { AnalyticsLineChart } from "../components/AnalyticsLineChart";
 import { DEFAULT_SHOP_DEFAULTS } from "../utils/defaults.server";
 import { getPlanLimits, planHasFeature, PlanFeature } from "../lib/plans";
 import {
+  normalizeForPlan,
+  getAspectRatiosForPlan,
+  getResolutionsForPlan,
+} from "../utils/aspect-ratio";
+import {
+  checkQuota,
+  checkStorageQuota,
+  syncLocalQuota,
+} from "../utils/quota.server";
+import {
   ArrowLeftIcon,
   DeleteIcon,
   ImageIcon,
@@ -883,8 +893,19 @@ export async function action({ request, params }: ActionFunctionArgs) {
     if (!prompt) {
       return json({ success: false, error: "Prompt is required." }, { status: 400 });
     }
-    if (!getAllowedAspectRatios(shopRecord.plan).includes(aspectRatio)) {
-      return json({ success: false, error: "Aspect ratio not allowed for plan." }, { status: 400 });
+
+    // Traduce el aspect ratio y la resolucion a los que acepta el modelo
+    // del plan. KIE rechaza con "not within the range of allowed options"
+    // cualquier valor fuera de su lista (p.ej. Flux no acepta "auto").
+    const normalized = normalizeForPlan(shopRecord.plan, {
+      aspectRatio,
+      resolution,
+    });
+
+    if (normalized.aspectRatio !== aspectRatio) {
+      console.log(
+        `[bainners] aspect ratio translated for plan ${shopRecord.plan}: ${aspectRatio} -> ${normalized.aspectRatio}`
+      );
     }
 
     const referenceImages: string[] = [];
@@ -913,6 +934,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     const fullPrompt = [prompt, additionalDetails, textBlock].filter(Boolean).join("\n");
     const referenceImagesCsv = referenceImages.join(",");
+
+    // Quota gate: the n8n Data Table holds the authoritative daily counter.
+    const quota = await checkQuota(
+      shopRecord.id,
+      shop,
+      shopRecord.plan,
+      "generation"
+    );
+    if (!quota.allowed) {
+      return json(
+        { success: false, error: quota.reason, quota },
+        { status: 403 }
+      );
+    }
+    await syncLocalQuota(shopRecord.id, "generation", quota.used);
+
     const storageUsedMB = await getStorageUsageMB(shopRecord.id);
 
     const result = await dispatchImageAutomation({
@@ -924,9 +961,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
         shop,
         app: process.env.AUTOMATIONS_APP_ID || "shopify-bainners",
         prompt: fullPrompt,
-        aspect_ratio: aspectRatio,
-        resolution,
+        aspect_ratio: normalized.aspectRatio,
+        resolution: normalized.resolution,
         output_format: "png",
+        aiModel: normalized.model,
+        aiGenerationsLimit: quota.limit,
         stylePrompt: stylePrompt || undefined,
         productContext: productId
           ? {
@@ -976,9 +1015,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const productImageUrl = (formData.get("productImageUrl") as string) || "";
     const productId = (formData.get("productId") as string) || "";
     const productTitle = (formData.get("productTitle") as string) || "";
-    if (!getAllowedAspectRatios(shopRecord.plan).includes(aspectRatio)) {
-      return json({ success: false, error: "Aspect ratio not allowed for plan." }, { status: 400 });
-    }
+
+    // Traduce el aspect ratio y la resolucion a los que acepta el modelo
+    // del plan (KIE rechaza "auto" en Flux, por ejemplo).
+    const normalized = normalizeForPlan(shopRecord.plan, {
+      aspectRatio,
+      resolution,
+    });
 
     const referenceImages: string[] = [];
     if (characterImageId) {
@@ -1015,10 +1058,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
       action: "generate",
       plan: shopRecord.plan,
       prompt: fullPrompt,
-      aspect_ratio: aspectRatio,
+      aspect_ratio: normalized.aspectRatio,
       stylePrompt: stylePrompt || undefined,
-      resolution,
+      resolution: normalized.resolution,
       output_format: "png",
+      aiModel: normalized.model,
       productContext: productId
         ? {
             productId,
@@ -1117,6 +1161,36 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+    // Quota gate: daily upload allowance for the plan.
+    const uploadQuota = await checkQuota(
+      shopRecord.id,
+      shop,
+      shopRecord.plan,
+      "upload"
+    );
+    if (!uploadQuota.allowed) {
+      return json(
+        { success: false, error: uploadQuota.reason, quota: uploadQuota },
+        { status: 403 }
+      );
+    }
+    await syncLocalQuota(shopRecord.id, "upload", uploadQuota.used);
+
+    // Storage gate: the shop must have room for this file.
+    const incomingMB = imageFile.size / (1024 * 1024);
+    const storageQuota = await checkStorageQuota(
+      shopRecord.id,
+      shopRecord.plan,
+      incomingMB
+    );
+    if (!storageQuota.allowed) {
+      return json(
+        { success: false, error: storageQuota.reason, quota: storageQuota },
+        { status: 403 }
+      );
+    }
+
     const storageUsedMB = await getStorageUsageMB(shopRecord.id);
 
     const result = await dispatchImageAutomation({
@@ -1132,6 +1206,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         mimeType: imageFile.type,
         optimize: true,
         storageUsedMB,
+        aiUploadsLimit: uploadQuota.limit,
       },
     });
 
@@ -1647,11 +1722,14 @@ function parseFilesize(filesizeStr: string | number): number {
   return value;
 }
 
+/**
+ * Aspect ratios offered in the UI for a plan.
+ *
+ * Only the ratios the plan's KIE model actually accepts, so the user can
+ * never pick one that the API rejects.
+ */
 function getAllowedAspectRatios(plan?: string): string[] {
-  if (plan === "free") {
-    return ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "auto"];
-  }
-  return ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"];
+  return getAspectRatiosForPlan(plan);
 }
 
 function getFormatFromName(value: string): string | null {
@@ -2508,8 +2586,10 @@ export default function BannerEdit() {
 
   const aspectRatioOptions = getAllowedAspectRatios(plan);
 
-  const resolutionOptions =
-    plan === "ultra" ? ["1K", "2K", "4K"] : plan === "pro" ? ["1K", "2K"] : ["1K"];
+  // Resoluciones que acepta el modelo del plan. KIE rechaza "4K" con
+  // "resolution is not within the range of allowed options" en todos los
+  // modelos soportados, asi que no se ofrece.
+  const resolutionOptions = getResolutionsForPlan(plan);
 
   const selectedStyleLabel =
     styleOptions.find((option) => option.id === selectedStyleTag)?.label || selectedStyleTag;

@@ -46,6 +46,12 @@ model Shop {
   installedAt     DateTime @default(now())
   uninstalledAt   DateTime?
   setupGuideDismissedAt DateTime?
+
+  // AI generation quota (rolling day counter)
+  aiGenerationsToday Int      @default(0)
+  aiGenerationsDate   DateTime? @db.Date // UTC day the counter refers to
+  aiUploadsToday      Int      @default(0)
+  aiUploadsDate       DateTime? @db.Date
   defaultBannerBackgroundColor String? @db.VarChar(20)
   defaultTitleFontSize String? @db.VarChar(20)
   defaultDescriptionFontSize String? @db.VarChar(20)

@@ -1,69 +1,110 @@
 # n8n Webhook Contract
 
-Este documento define el contrato entre la app de Shopify y el webhook de n8n para procesamiento de imágenes.
+Contrato entre la app de Shopify (bAInners) y los workflows de n8n para el
+procesamiento de imágenes.
 
-## Endpoint
+## Endpoints
 
-```
-POST https://brain.orivisdev.shop/webhook/image-processor
-```
+Cada acción tiene su propio workflow. Las URLs se configuran por variable de
+entorno en la app:
+
+| Acción      | Variable de entorno            | Workflow en n8n                    |
+|-------------|--------------------------------|------------------------------------|
+| `generate`  | `N8N_WEBHOOK_IMAGE_PROCESSOR`  | bAInners - Generate image (KIE + Quota) |
+| `upload`    | `N8N_WEBHOOK_IMAGE_UPLOAD`     | bAInners - Upload image (Spaces)   |
+| `optimize`  | `N8N_WEBHOOK_IMAGE_OPTIMIZE`   | bAInners - Optimize image (Spaces) |
+| `delete`    | `N8N_WEBHOOK_IMAGE_DELETE`     | bAInners - Delete image (Spaces)   |
+| poll estado | `N8N_WEBHOOK_IMAGE_STATUS`     | bAInners - Poll image status (KIE + Spaces) |
+| consulta    | `N8N_WEBHOOK_IMAGE_QUOTA`      | bAInners - Quota (Data Table)      |
+
+Si `N8N_WEBHOOK_IMAGE_UPLOAD` / `_OPTIMIZE` no están definidas, la app cae
+en `N8N_WEBHOOK_IMAGE_PROCESSOR` para mantener compatibilidad con
+despliegues anteriores.
 
 ## Autenticación
 
 ```
-Authorization: Bearer {N8N_TOKEN}
+Authorization: Bearer {AUTOMATIONS_TOKEN}
 ```
+
+Todos los workflows validan el token en el primer nodo y lanzan `Unauthorized`
+si no coincide.
 
 ---
 
-## Request Payload
+## Data Table: contador de uso
 
-### Common Fields (siempre presentes)
+El contador diario vive en una Data Table de n8n llamada `bainners_usage`.
+
+| Columna | Tipo    | Contenido                          |
+|---------|---------|------------------------------------|
+| `shop`  | string  | dominio del shop                   |
+| `date`  | string  | día UTC en formato `YYYY-MM-DD`    |
+| `kind`  | string  | `generation` o `upload`            |
+| `count` | number  | usos consumidos en el día           |
+
+La clave única lógica es `(shop, date, kind)`. El workflow de cuota usa la
+operación `upsert` con `matchingColumns` para obtener la fila del día
+(incrementándola solo en la operación de guardado).
+
+### Consulta de cuota
+
+```
+POST {N8N_WEBHOOK_IMAGE_QUOTA}
+```
 
 ```json
 {
-  "action": "generate" | "upload" | "optimize",
-  "shopId": "uuid-del-shop",
-  "requestId": "uuid-opcional-para-tracking"
+  "shop": "mi-tienda.myshopify.com",
+  "kind": "generation",
+  "plan": "free",
+  "date": "2026-10-27"
+}
+```
+
+Respuesta:
+
+```json
+{
+  "used": 0,
+  "limit": 1,
+  "remaining": 1,
+  "allowed": true,
+  "date": "2026-10-27",
+  "model": "flux-2/pro-text-to-image"
 }
 ```
 
 ---
 
-## Action: `generate` (Generar imágenes con IA)
+## Límites por plan
+
+| Plan   | Generaciones/día | Subidas/día | Storage | Modelo IA                |
+|--------|------------------|-------------|---------|--------------------------|
+| free   | 1                | 5           | 1 GB    | `flux-2/pro-text-to-image` |
+| pro    | 10               | 50          | 5 GB    | `nano-banana-pro`         |
+| ultra  | 20               | 200         | 10 GB   | `nano-banana-pro`         |
+
+El modelo lo decide **n8n** a partir del `plan` del payload: el cliente no
+puede elegir un modelo distinto.
+
+---
+
+## Action: `generate`
 
 ### Request
 
 ```json
 {
   "action": "generate",
-  "shopId": "shop-123",
-  "requestId": "gen-req-456",
-  "generate": {
-    "prompt": "Modern athletic shoes in outdoor setting, natural lighting",
-    "stylePrompt": "Premium studio lighting, low-key, clean shadows...",
-    "negativePrompt": "No cartoons, no extra items, no text...",
-    "productContext": {
-      "productId": "gid://shopify/Product/123",
-      "title": "Running Shoes Pro",
-      "description": "High-performance running shoes",
-      "price": "129.99"
-    },
-    "referenceImages": [
-      "https://cdn.shopify.com/product-image.jpg",
-      "data:image/jpeg;base64,/9j/4AAQ..."
-    ],
-    "format": "16:9",
-    "dimensions": "1920x800",
-    "variantsCount": 3,
-    "compositionSettings": {
-      "composition": "product_left",
-      "backgroundStyle": "gradient",
-      "textPosition": "right",
-      "primaryColor": "#000000",
-      "accentColor": "#C9A227"
-    }
-  }
+  "shop": "mi-tienda.myshopify.com",
+  "plan": "pro",
+  "prompt": "zapatillas deportivas en exterior",
+  "aspect_ratio": "16:9",
+  "resolution": "1K",
+  "output_format": "png",
+  "referenceImages": "https://.../ref-1.jpg,https://.../ref-2.jpg",
+  "variantsCount": 1
 }
 ```
 
@@ -71,56 +112,29 @@ Authorization: Bearer {N8N_TOKEN}
 
 ```json
 {
-  "success": true,
-  "action": "generate",
-  "requestId": "gen-req-456",
-  "variants": [
-    {
-      "imageUrl": "https://bainners-assets.nyc3.digitaloceanspaces.com/shop-123/banner-abc.webp",
-      "cdnUrl": "https://bainners-assets.nyc3.cdn.digitaloceanspaces.com/shop-123/banner-abc.webp",
-      "sizeInMB": 0.42,
-      "width": 1920,
-      "height": 800,
-      "format": "webp",
-      "variantIndex": 0
-    },
-    {
-      "imageUrl": "https://bainners-assets.nyc3.digitaloceanspaces.com/shop-123/banner-def.webp",
-      "cdnUrl": "https://bainners-assets.nyc3.cdn.digitaloceanspaces.com/shop-123/banner-def.webp",
-      "sizeInMB": 0.38,
-      "width": 1920,
-      "height": 800,
-      "format": "webp",
-      "variantIndex": 1
-    },
-    {
-      "imageUrl": "https://bainners-assets.nyc3.digitaloceanspaces.com/shop-123/banner-ghi.webp",
-      "cdnUrl": "https://bainners-assets.nyc3.cdn.digitaloceanspaces.com/shop-123/banner-ghi.webp",
-      "sizeInMB": 0.45,
-      "width": 1920,
-      "height": 800,
-      "format": "webp",
-      "variantIndex": 2
-    }
-  ]
+  "taskId": "a9530a3d9ea6193ecb98b375a22aeebc",
+  "state": "pending"
 }
 ```
 
+Si la cuota diaria está agotada, el workflow responde con error:
+`Daily AI generation quota reached (N per day for this plan)`.
+
 ---
 
-## Action: `upload` (Subir imagen del usuario a S3)
+## Action: `upload`
 
 ### Request
 
 ```json
 {
   "action": "upload",
-  "shopId": "shop-123",
-  "upload": {
-    "imageBase64": "data:image/jpeg;base64,/9j/4AAQ...",
-    "fileName": "my-banner-image.jpg",
-    "optimize": true
-  }
+  "shop": "mi-tienda.myshopify.com",
+  "plan": "free",
+  "imageBase64": "iVBORw0KGgo...",
+  "fileName": "banner.png",
+  "mimeType": "image/png",
+  "optimize": true
 }
 ```
 
@@ -130,149 +144,88 @@ Authorization: Bearer {N8N_TOKEN}
 {
   "success": true,
   "action": "upload",
-  "imageUrl": "https://bainners-assets.nyc3.digitaloceanspaces.com/shop-123/my-banner-image.webp",
-  "cdnUrl": "https://bainners-assets.nyc3.cdn.digitaloceanspaces.com/shop-123/my-banner-image.webp",
-  "sizeInMB": 0.25,
-  "width": 1920,
-  "height": 1080,
-  "format": "webp"
+  "imageUrl": "https://cdn-orivisdev.nyc3.cdn.digitaloceanspaces.com/bAInners/mi-tienda.myshopify.com/abc123-banner.png",
+  "cdnUrl": "https://cdn-orivisdev.nyc3.cdn.digitaloceanspaces.com/bAInners/mi-tienda.myshopify.com/abc123-banner.png",
+  "filename": "abc123-banner.png",
+  "key": "bAInners/mi-tienda.myshopify.com/abc123-banner.png",
+  "sizeInMB": 0.42,
+  "format": "png"
 }
 ```
 
+La imagen se guarda en el bucket `cdn-orivisdev` con la clave
+`bAInners/<shop>/<random>-<nombre>`.
+
 ---
 
-## Action: `optimize` (Optimizar imagen existente)
+## Action: `delete`
 
 ### Request
 
 ```json
 {
-  "action": "optimize",
-  "shopId": "shop-123",
-  "optimize": {
-    "imageUrl": "https://cdn.shopify.com/s/files/1/0000/0000/products/image.jpg",
-    "targetFormat": "webp",
-    "maxSizeMB": 0.5
-  }
+  "fileKey": "bAInners/mi-tienda.myshopify.com/abc123-banner.png"
 }
 ```
+
+También acepta `key`, `path` o `imageKey`, y acepta una URL completa (extrae
+la clave).
 
 ### Response
 
 ```json
 {
   "success": true,
-  "action": "optimize",
-  "imageUrl": "https://bainners-assets.nyc3.digitaloceanspaces.com/shop-123/optimized-xyz.webp",
-  "cdnUrl": "https://bainners-assets.nyc3.cdn.digitaloceanspaces.com/shop-123/optimized-xyz.webp",
-  "sizeInMB": 0.32,
-  "width": 1920,
-  "height": 1080,
-  "format": "webp"
+  "action": "delete",
+  "key": "bAInners/mi-tienda.myshopify.com/abc123-banner.png",
+  "imageUrl": "https://cdn-orivisdev.nyc3.cdn.digitaloceanspaces.com/bAInners/mi-tienda.myshopify.com/abc123-banner.png"
 }
 ```
 
 ---
 
-## Error Response
+## Poll de estado
 
-En caso de error, todas las acciones devuelven:
+```
+POST {N8N_WEBHOOK_IMAGE_STATUS}
+```
+
+```json
+{ "shop": "mi-tienda.myshopify.com", "taskId": "a9530a3d..." }
+```
+
+Cuando la tarea termina, n8n **descarga la imagen de KIE, la sube al bucket de
+Spaces** y devuelve la URL del CDN:
 
 ```json
 {
-  "success": false,
-  "action": "generate" | "upload" | "optimize",
-  "requestId": "...",
-  "error": "Descripción del error"
+  "success": true,
+  "state": "success",
+  "imageUrl": "https://cdn-orivisdev.nyc3.cdn.digitaloceanspaces.com/bAInners/...",
+  "cdnUrl": "https://cdn-orivisdev.nyc3.cdn.digitaloceanspaces.com/bAInners/...",
+  "filename": "a9530a3d-image_abc.png",
+  "key": "bAInners/mi-tienda.myshopify.com/a9530a3d-image_abc.png",
+  "taskId": "a9530a3d..."
 }
 ```
 
----
-
-## Flujo en n8n (recomendado)
-
-1. **Webhook Trigger** - recibe el POST
-2. **Switch Node** - evalúa `action`
-3. **Branch por acción**:
-   - `generate`:
-     - Construir system prompt (anti-injection)
-     - Llamar API de IA (DALL-E, Midjourney, Stable Diffusion, etc.)
-     - Generar N variantes
-     - Subir cada variante a S3
-     - Optimizar (WebP, compresión)
-     - Retornar array de variants
-   - `upload`:
-     - Decodificar base64
-     - Optimizar si `optimize: true`
-     - Subir a S3
-     - Retornar URL
-   - `optimize`:
-     - Descargar imagen de URL
-     - Aplicar optimizaciones
-     - Subir a S3
-     - Retornar nueva URL
-4. **Respond to Webhook** - enviar response
+Esto garantiza que las imágenes generadas persisten en el bucket del
+cliente y no dependan de la URL temporal del proveedor de IA.
 
 ---
 
-## Notas Importantes
+## Configuración de n8n
 
-### Para la acción `generate`:
+Variables en `/srv/n8n/.env`:
 
-- **System prompt**: n8n debe inyectar un system prompt que prevenga prompt injection
-- **Validación**: Verificar que el prompt no contenga instrucciones maliciosas
-- **Límites**: Máximo 4 variantes por request
-- **Timeout**: Considerar que la generación puede tardar 30-120 segundos
-- **Fallback**: Si la IA falla, retornar `success: false` con mensaje de error
-
-### Para `upload` y `optimize`:
-
-- **Validación de archivos**: Verificar que sean imágenes válidas (JPG, PNG, WebP)
-- **Tamaño máximo**: Limitar a 10MB de input
-- **Optimización automática**: Siempre convertir a WebP y comprimir
-- **Estructura de carpetas en S3**: `{shopId}/{timestamp}-{random}.webp`
-
-### Seguridad:
-
-- Validar el token en cada request
-- No exponer URLs de S3 con acceso directo (usar CDN)
-- Rate limiting en n8n si es necesario
-
----
-
-## Ejemplo de uso en la app
-
-```typescript
-import { generateImageWithAI } from "~/utils/n8n.server";
-
-// En un loader o action de Remix
-const result = await generateImageWithAI({
-  shopId: shop.id,
-  requestId: generationRequest.id,
-  prompt: userPrompt,
-  stylePrompt: style.stylePrompt,
-  format: "16:9",
-  dimensions: "1920x800",
-  variantsCount: 3,
-});
-
-if (result.success && result.variants) {
-  // Guardar las variantes en la base de datos
-  for (const variant of result.variants) {
-    await prisma.bannerImage.create({
-      data: {
-        shopId: shop.id,
-        bannerId: banner.id,
-        sourceType: "ai_generated",
-        storageUrl: variant.imageUrl,
-        sizeInMB: variant.sizeInMB,
-        width: variant.width,
-        height: variant.height,
-        format: variant.format,
-        variantIndex: variant.variantIndex,
-        generationRequestId: generationRequest.id,
-      },
-    });
-  }
-}
 ```
+SPACES_ACCESS_KEY=...
+SPACES_SECRET_KEY=...
+SPACES_ENDPOINT=https://cdn-orivisdev.nyc3.cdn.digitaloceanspaces.com
+SPACES_BUCKET=cdn-orivisdev
+KIE_API_KEY=...
+AUTOMATIONS_TOKEN=...
+```
+
+La credencial de n8n (`DigitalOcean Spaces cdn-orivisdev`) debe apuntar al
+mismo bucket y tener permisos de lectura y escritura.
